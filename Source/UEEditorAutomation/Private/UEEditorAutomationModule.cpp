@@ -2,7 +2,10 @@
 #include "Application/EditorAutomationApplicationService.h"
 #include "Adapter/UEBlueprintEditorAdapter.h"
 #include "Core/AutomationLog.h"
+#include "Framework/Docking/TabManager.h"
 #include "Modules/ModuleManager.h"
+#include "UI/AutomationDebugPanel.h"
+#include "Widgets/Docking/SDockTab.h"
 
 #if ENGINE_MAJOR_VERSION >= 5
 #include "Containers/Map.h"
@@ -16,11 +19,15 @@ class FUEEditorAutomationModule : public IModuleInterface
 public:
     virtual void StartupModule() override
     {
+        RegisterDebugPanel();
+
         TSharedRef<FUEBlueprintEditorAdapter> BlueprintAdapter = MakeShared<FUEBlueprintEditorAdapter>();
         TSharedRef<FBlueprintAutomationService> BlueprintService = MakeShared<FBlueprintAutomationService>(BlueprintAdapter);
 
         ApplicationService = MakeShared<FEditorAutomationApplicationService>();
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateBlueprintTaskExecutor>(BlueprintService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateBlueprintFromTemplateTaskExecutor>(BlueprintService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FBatchCreateBlueprintsTaskExecutor>(BlueprintService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FModifyBlueprintComponentsTaskExecutor>(BlueprintService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FModifyBlueprintDefaultsTaskExecutor>(BlueprintService));
         ApplicationService->Initialize();
@@ -35,6 +42,8 @@ public:
 
     virtual void ShutdownModule() override
     {
+        UnregisterDebugPanel();
+
         if (TickHandle.IsValid())
         {
 #if ENGINE_MAJOR_VERSION >= 5
@@ -54,6 +63,28 @@ public:
     }
 
 private:
+    void RegisterDebugPanel()
+    {
+        FGlobalTabmanager::Get()->RegisterNomadTabSpawner(
+            DebugPanelTabName,
+            FOnSpawnTab::CreateRaw(this, &FUEEditorAutomationModule::SpawnDebugPanelTab))
+            .SetDisplayName(FText::FromString(TEXT("UE Automation")));
+    }
+
+    void UnregisterDebugPanel()
+    {
+        FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(DebugPanelTabName);
+    }
+
+    TSharedRef<SDockTab> SpawnDebugPanelTab(const FSpawnTabArgs& Args)
+    {
+        return SNew(SDockTab)
+            .TabRole(ETabRole::NomadTab)
+            [
+                SNew(SAutomationDebugPanel)
+            ];
+    }
+
     bool HandleTicker(float DeltaTime)
     {
         if (ApplicationService.IsValid())
@@ -65,6 +96,7 @@ private:
 
     TSharedPtr<FEditorAutomationApplicationService> ApplicationService;
     FDelegateHandle TickHandle;
+    const FName DebugPanelTabName = TEXT("UEEditorAutomationDebugPanel");
 };
 
 IMPLEMENT_MODULE(FUEEditorAutomationModule, UEEditorAutomation)

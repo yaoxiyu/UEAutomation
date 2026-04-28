@@ -47,6 +47,13 @@ struct FAutomationComponentSpec
     TArray<FAutomationPropertyValue> Properties;
 };
 
+struct FAutomationComponentOverride
+{
+    FString ComponentName;
+    FAutomationTransformSpec Transform;
+    TArray<FAutomationPropertyValue> Properties;
+};
+
 struct FAutomationAssetSpec
 {
     FString AssetType;
@@ -55,6 +62,19 @@ struct FAutomationAssetSpec
     FString AssetPath;
     FString ParentClass;
     FString BlueprintType;
+};
+
+struct FAutomationTemplateRef
+{
+    FString TemplateId;
+};
+
+struct FAutomationBatchBlueprintItem
+{
+    FAutomationAssetSpec Asset;
+    FAutomationTemplateRef Template;
+    TArray<FAutomationComponentOverride> ComponentOverrides;
+    TArray<FAutomationPropertyValue> ClassDefaults;
 };
 
 struct FAutomationExecutionOptions
@@ -84,9 +104,13 @@ struct FAutomationTaskRequest
     FAutomationExecutionOptions Execution;
     FAutomationAssetSpec Asset;
     FAutomationAssetSpec TargetAsset;
+    FAutomationTemplateRef Template;
+    FAutomationTemplateRef SharedTemplate;
     FAutomationComponentSpec RootComponent;
     TArray<FAutomationComponentSpec> Components;
+    TArray<FAutomationComponentOverride> ComponentOverrides;
     TArray<FAutomationPropertyValue> ClassDefaults;
+    TArray<FAutomationBatchBlueprintItem> BatchItems;
     TArray<FAutomationOperation> Operations;
     TArray<FString> PostActions;
     FString SourcePath;
@@ -127,6 +151,7 @@ public:
 private:
     static bool ParseAssetSpec(const TSharedPtr<FJsonObject>& Object, FAutomationAssetSpec& OutSpec);
     static bool ParseComponentSpec(const TSharedPtr<FJsonObject>& Object, FAutomationComponentSpec& OutSpec);
+    static bool ParseComponentOverride(const TSharedPtr<FJsonObject>& Object, FAutomationComponentOverride& OutSpec);
     static bool ParsePropertyArray(const TArray<TSharedPtr<FJsonValue>>* Array, TArray<FAutomationPropertyValue>& OutProperties);
     static bool ParseVector(const TArray<TSharedPtr<FJsonValue>>& Array, FVector& OutVector);
     static bool ParseRotator(const TArray<TSharedPtr<FJsonValue>>& Array, FRotator& OutRotator);

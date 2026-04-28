@@ -20,8 +20,12 @@ public class UEEditorAutomation : ModuleRules
             "AssetRegistry",
             "AssetTools",
             "BlueprintGraph",
+            "EditorStyle",
+            "InputCore",
             "KismetCompiler",
             "Projects",
+            "Slate",
+            "SlateCore",
             "UnrealEd"
         });
     }

@@ -1,5 +1,8 @@
 #include "Application/BlueprintTaskExecutors.h"
 
+#include "Core/AutomationWhitelist.h"
+#include "Misc/PackageName.h"
+
 namespace
 {
 bool ValidateComponentName(const FAutomationComponentSpec& Component, FAutomationTaskResult& OutResult, const FString& FieldPrefix)
@@ -105,6 +108,76 @@ bool ValidateModifyComponentOperations(const FAutomationTaskRequest& Request, FA
 
     return true;
 }
+
+bool ValidateTemplateOverrides(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
+{
+    for (int32 Index = 0; Index < Request.ComponentOverrides.Num(); ++Index)
+    {
+        const FAutomationComponentOverride& Override = Request.ComponentOverrides[Index];
+        const FString FieldPrefix = FString::Printf(TEXT("payload.overrides.component_overrides[%d]"), Index);
+
+        if (Override.ComponentName.IsEmpty())
+        {
+            OutResult.AddError(TEXT("MissingRequiredField"), TEXT("component_name is required."), FieldPrefix + TEXT(".component_name"));
+            return false;
+        }
+
+        if (Override.Properties.Num() == 0
+            && !Override.Transform.bHasLocation
+            && !Override.Transform.bHasRotation
+            && !Override.Transform.bHasScale)
+        {
+            OutResult.AddError(TEXT("MissingRequiredField"), TEXT("component override must contain properties or transform."), FieldPrefix);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool ValidateBatchItemOverrides(const TArray<FAutomationComponentOverride>& ComponentOverrides, FAutomationTaskResult& OutResult, const FString& FieldPrefix)
+{
+    for (int32 Index = 0; Index < ComponentOverrides.Num(); ++Index)
+    {
+        const FAutomationComponentOverride& Override = ComponentOverrides[Index];
+        const FString OverrideFieldPrefix = FString::Printf(TEXT("%s.overrides.component_overrides[%d]"), *FieldPrefix, Index);
+
+        if (Override.ComponentName.IsEmpty())
+        {
+            OutResult.AddError(TEXT("MissingRequiredField"), TEXT("component_name is required."), OverrideFieldPrefix + TEXT(".component_name"));
+            return false;
+        }
+
+        if (Override.Properties.Num() == 0
+            && !Override.Transform.bHasLocation
+            && !Override.Transform.bHasRotation
+            && !Override.Transform.bHasScale)
+        {
+            OutResult.AddError(TEXT("MissingRequiredField"), TEXT("component override must contain properties or transform."), OverrideFieldPrefix);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool IsAllowedBatchPackagePath(const FString& PackagePath)
+{
+    const FAutomationWhitelist Whitelist = FAutomationWhitelistProvider::Load();
+    if (!Whitelist.bLoaded)
+    {
+        return false;
+    }
+
+    for (const FString& Root : Whitelist.AllowedAssetRoots)
+    {
+        if (PackagePath.StartsWith(Root))
+        {
+            return true;
+        }
+    }
+    return false;
+}
 }
 
 FBlueprintTaskExecutorBase::FBlueprintTaskExecutorBase(const TSharedRef<FBlueprintAutomationService>& InService)
@@ -197,4 +270,294 @@ FString FModifyBlueprintDefaultsTaskExecutor::GetTaskType() const
 bool FModifyBlueprintDefaultsTaskExecutor::Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
 {
     return Service->ModifyBlueprintDefaults(Request, OutResult);
+}
+
+FCreateBlueprintFromTemplateTaskExecutor::FCreateBlueprintFromTemplateTaskExecutor(const TSharedRef<FBlueprintAutomationService>& InService)
+    : FBlueprintTaskExecutorBase(InService)
+{
+}
+
+FString FCreateBlueprintFromTemplateTaskExecutor::GetTaskType() const
+{
+    return TEXT("create_blueprint_from_template");
+}
+
+bool FCreateBlueprintFromTemplateTaskExecutor::Validate(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
+{
+    if (Request.Asset.AssetName.IsEmpty())
+    {
+        OutResult.AddError(TEXT("MissingRequiredField"), TEXT("asset_name is required."), TEXT("payload.asset.asset_name"));
+        return false;
+    }
+    if (Request.Asset.PackagePath.IsEmpty())
+    {
+        OutResult.AddError(TEXT("MissingRequiredField"), TEXT("package_path is required."), TEXT("payload.asset.package_path"));
+        return false;
+    }
+    if (Request.Template.TemplateId.IsEmpty())
+    {
+        OutResult.AddError(TEXT("MissingRequiredField"), TEXT("template_id is required."), TEXT("payload.template.template_id"));
+        return false;
+    }
+    return ValidateTemplateOverrides(Request, OutResult);
+}
+
+bool FCreateBlueprintFromTemplateTaskExecutor::Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
+{
+    FAutomationTaskRequest ExpandedRequest;
+    if (!BuildExpandedRequest(Request, ExpandedRequest, OutResult))
+    {
+        return false;
+    }
+
+    OutResult.AddLog(FString::Printf(TEXT("create_blueprint_from_template: expanded template %s"), *Request.Template.TemplateId));
+    return Service->CreateBlueprint(ExpandedRequest, OutResult);
+}
+
+bool FCreateBlueprintFromTemplateTaskExecutor::BuildExpandedRequest(const FAutomationTaskRequest& Request, FAutomationTaskRequest& OutExpandedRequest, FAutomationTaskResult& OutResult) const
+{
+    FAutomationBlueprintTemplate BlueprintTemplate;
+    FString Error;
+    if (!TemplateRegistry.FindTemplate(Request.Template.TemplateId, BlueprintTemplate, Error))
+    {
+        const FString Code = Error.Contains(TEXT("could not be loaded")) || Error.Contains(TEXT("not valid JSON")) || Error.Contains(TEXT("missing templates")) || Error.Contains(TEXT("invalid template")) || Error.Contains(TEXT("duplicate template_id"))
+            ? TEXT("TemplateRegistryLoadFailed")
+            : TEXT("TemplateNotFound");
+        OutResult.AddError(Code, Error, TEXT("payload.template.template_id"));
+        return false;
+    }
+
+    if (BlueprintTemplate.ParentClass.IsEmpty() && Request.Asset.ParentClass.IsEmpty())
+    {
+        OutResult.AddError(TEXT("MissingRequiredField"), TEXT("Template or request must provide parent_class."), TEXT("payload.asset.parent_class"));
+        return false;
+    }
+
+    OutExpandedRequest = Request;
+    OutExpandedRequest.TaskType = TEXT("create_blueprint");
+    OutExpandedRequest.Asset.ParentClass = Request.Asset.ParentClass.IsEmpty() ? BlueprintTemplate.ParentClass : Request.Asset.ParentClass;
+    OutExpandedRequest.RootComponent = BlueprintTemplate.RootComponent;
+    OutExpandedRequest.Components = BlueprintTemplate.Components;
+    OutExpandedRequest.ClassDefaults = BlueprintTemplate.ClassDefaults;
+    MergeProperties(OutExpandedRequest.ClassDefaults, Request.ClassDefaults);
+
+    return ApplyComponentOverrides(OutExpandedRequest, Request, OutResult);
+}
+
+bool FCreateBlueprintFromTemplateTaskExecutor::ApplyComponentOverrides(FAutomationTaskRequest& ExpandedRequest, const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) const
+{
+    for (int32 OverrideIndex = 0; OverrideIndex < Request.ComponentOverrides.Num(); ++OverrideIndex)
+    {
+        const FAutomationComponentOverride& Override = Request.ComponentOverrides[OverrideIndex];
+        FAutomationComponentSpec* TargetComponent = nullptr;
+
+        if (ExpandedRequest.RootComponent.ComponentName == Override.ComponentName)
+        {
+            TargetComponent = &ExpandedRequest.RootComponent;
+        }
+        else
+        {
+            for (FAutomationComponentSpec& Component : ExpandedRequest.Components)
+            {
+                if (Component.ComponentName == Override.ComponentName)
+                {
+                    TargetComponent = &Component;
+                    break;
+                }
+            }
+        }
+
+        if (!TargetComponent)
+        {
+            OutResult.AddError(
+                TEXT("TemplateOverrideComponentNotFound"),
+                FString::Printf(TEXT("Template '%s' does not contain component '%s'."), *Request.Template.TemplateId, *Override.ComponentName),
+                FString::Printf(TEXT("payload.overrides.component_overrides[%d].component_name"), OverrideIndex));
+            return false;
+        }
+
+        if (Override.Transform.bHasLocation)
+        {
+            TargetComponent->Transform.bHasLocation = true;
+            TargetComponent->Transform.Location = Override.Transform.Location;
+        }
+        if (Override.Transform.bHasRotation)
+        {
+            TargetComponent->Transform.bHasRotation = true;
+            TargetComponent->Transform.Rotation = Override.Transform.Rotation;
+        }
+        if (Override.Transform.bHasScale)
+        {
+            TargetComponent->Transform.bHasScale = true;
+            TargetComponent->Transform.Scale = Override.Transform.Scale;
+        }
+        MergeProperties(TargetComponent->Properties, Override.Properties);
+    }
+
+    return true;
+}
+
+void FCreateBlueprintFromTemplateTaskExecutor::MergeProperties(TArray<FAutomationPropertyValue>& TargetProperties, const TArray<FAutomationPropertyValue>& OverrideProperties) const
+{
+    for (const FAutomationPropertyValue& OverrideProperty : OverrideProperties)
+    {
+        bool bReplaced = false;
+        for (FAutomationPropertyValue& TargetProperty : TargetProperties)
+        {
+            if (TargetProperty.Name == OverrideProperty.Name)
+            {
+                TargetProperty = OverrideProperty;
+                bReplaced = true;
+                break;
+            }
+        }
+
+        if (!bReplaced)
+        {
+            TargetProperties.Add(OverrideProperty);
+        }
+    }
+}
+
+FBatchCreateBlueprintsTaskExecutor::FBatchCreateBlueprintsTaskExecutor(const TSharedRef<FBlueprintAutomationService>& InService)
+    : FCreateBlueprintFromTemplateTaskExecutor(InService)
+{
+}
+
+FString FBatchCreateBlueprintsTaskExecutor::GetTaskType() const
+{
+    return TEXT("batch_create_blueprints");
+}
+
+bool FBatchCreateBlueprintsTaskExecutor::Validate(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
+{
+    if (Request.BatchItems.Num() == 0)
+    {
+        OutResult.AddError(TEXT("MissingRequiredField"), TEXT("items must contain at least one blueprint item."), TEXT("payload.items"));
+        return false;
+    }
+
+    if (!ValidateTemplateOverrides(Request, OutResult))
+    {
+        return false;
+    }
+
+    if (Request.SharedTemplate.TemplateId.IsEmpty())
+    {
+        for (int32 Index = 0; Index < Request.BatchItems.Num(); ++Index)
+        {
+            if (Request.BatchItems[Index].Template.TemplateId.IsEmpty())
+            {
+                OutResult.AddError(TEXT("MissingRequiredField"), TEXT("shared_template or item template_id is required."), FString::Printf(TEXT("payload.items[%d].template.template_id"), Index));
+                return false;
+            }
+        }
+    }
+
+    TSet<FString> AssetKeys;
+    for (int32 Index = 0; Index < Request.BatchItems.Num(); ++Index)
+    {
+        const FAutomationBatchBlueprintItem& Item = Request.BatchItems[Index];
+        const FString FieldPrefix = FString::Printf(TEXT("payload.items[%d]"), Index);
+
+        if (Item.Asset.AssetName.IsEmpty())
+        {
+            OutResult.AddError(TEXT("MissingRequiredField"), TEXT("asset_name is required."), FieldPrefix + TEXT(".asset.asset_name"));
+            return false;
+        }
+        if (Item.Asset.PackagePath.IsEmpty())
+        {
+            OutResult.AddError(TEXT("MissingRequiredField"), TEXT("package_path is required."), FieldPrefix + TEXT(".asset.package_path"));
+            return false;
+        }
+        if (!FPackageName::IsValidLongPackageName(Item.Asset.PackagePath))
+        {
+            OutResult.AddError(TEXT("InvalidPackagePath"), FString::Printf(TEXT("Invalid package path '%s'."), *Item.Asset.PackagePath), FieldPrefix + TEXT(".asset.package_path"));
+            return false;
+        }
+        if (!IsAllowedBatchPackagePath(Item.Asset.PackagePath))
+        {
+            OutResult.AddError(TEXT("AssetRootNotAllowed"), FString::Printf(TEXT("Package path '%s' is outside allowed roots."), *Item.Asset.PackagePath), FieldPrefix + TEXT(".asset.package_path"));
+            return false;
+        }
+
+        const FString AssetKey = Item.Asset.PackagePath / Item.Asset.AssetName;
+        if (AssetKeys.Contains(AssetKey))
+        {
+            OutResult.AddError(TEXT("DuplicateBatchAsset"), FString::Printf(TEXT("Duplicate batch asset '%s'."), *AssetKey), FieldPrefix + TEXT(".asset"));
+            return false;
+        }
+        AssetKeys.Add(AssetKey);
+
+        if (!ValidateBatchItemOverrides(Item.ComponentOverrides, OutResult, FieldPrefix))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool FBatchCreateBlueprintsTaskExecutor::Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
+{
+    TArray<FAutomationTaskRequest> ExpandedRequests;
+    for (const FAutomationBatchBlueprintItem& Item : Request.BatchItems)
+    {
+        FAutomationTaskRequest ItemRequest = BuildItemRequest(Request, Item);
+        FAutomationTaskRequest ExpandedRequest;
+        if (!BuildExpandedRequest(ItemRequest, ExpandedRequest, OutResult))
+        {
+            return false;
+        }
+        ExpandedRequests.Add(ExpandedRequest);
+    }
+
+    for (int32 Index = 0; Index < ExpandedRequests.Num(); ++Index)
+    {
+        const FAutomationTaskRequest& ExpandedRequest = ExpandedRequests[Index];
+        if (Service->DoesAssetExist(ExpandedRequest.Asset.PackagePath, ExpandedRequest.Asset.AssetName))
+        {
+            if (ExpandedRequest.Execution.bSkipIfExists)
+            {
+                continue;
+            }
+
+            if (ExpandedRequest.Execution.bOverwriteIfExists)
+            {
+                OutResult.AddError(TEXT("OverwriteNotSupported"), TEXT("overwrite_if_exists is not supported for batch_create_blueprints in Phase 2."), FString::Printf(TEXT("payload.items[%d].asset"), Index));
+                return false;
+            }
+
+            OutResult.AddError(
+                TEXT("AssetAlreadyExists"),
+                FString::Printf(TEXT("Asset '%s/%s' already exists."), *ExpandedRequest.Asset.PackagePath, *ExpandedRequest.Asset.AssetName),
+                FString::Printf(TEXT("payload.items[%d].asset"), Index));
+            return false;
+        }
+    }
+
+    for (int32 Index = 0; Index < ExpandedRequests.Num(); ++Index)
+    {
+        OutResult.AddLog(FString::Printf(TEXT("batch_create_blueprints: create item %d/%d"), Index + 1, ExpandedRequests.Num()));
+        if (!Service->CreateBlueprint(ExpandedRequests[Index], OutResult))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+FAutomationTaskRequest FBatchCreateBlueprintsTaskExecutor::BuildItemRequest(const FAutomationTaskRequest& BatchRequest, const FAutomationBatchBlueprintItem& Item) const
+{
+    FAutomationTaskRequest ItemRequest = BatchRequest;
+    ItemRequest.TaskType = TEXT("create_blueprint_from_template");
+    ItemRequest.Asset = Item.Asset;
+    ItemRequest.Template = Item.Template.TemplateId.IsEmpty() ? BatchRequest.SharedTemplate : Item.Template;
+    ItemRequest.ComponentOverrides = BatchRequest.ComponentOverrides;
+    ItemRequest.ComponentOverrides.Append(Item.ComponentOverrides);
+    ItemRequest.ClassDefaults = BatchRequest.ClassDefaults;
+    MergeProperties(ItemRequest.ClassDefaults, Item.ClassDefaults);
+    ItemRequest.BatchItems.Reset();
+    return ItemRequest;
 }

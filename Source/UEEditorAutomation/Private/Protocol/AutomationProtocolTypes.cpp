@@ -73,6 +73,18 @@ bool FAutomationProtocolJson::ParseRequest(const FString& JsonText, FAutomationT
         ParseAssetSpec(*AssetObject, OutRequest.Asset);
     }
 
+    const TSharedPtr<FJsonObject>* TemplateObject = nullptr;
+    if ((*PayloadObject)->TryGetObjectField(TEXT("template"), TemplateObject) && TemplateObject && TemplateObject->IsValid())
+    {
+        (*TemplateObject)->TryGetStringField(TEXT("template_id"), OutRequest.Template.TemplateId);
+    }
+
+    const TSharedPtr<FJsonObject>* SharedTemplateObject = nullptr;
+    if ((*PayloadObject)->TryGetObjectField(TEXT("shared_template"), SharedTemplateObject) && SharedTemplateObject && SharedTemplateObject->IsValid())
+    {
+        (*SharedTemplateObject)->TryGetStringField(TEXT("template_id"), OutRequest.SharedTemplate.TemplateId);
+    }
+
     const TSharedPtr<FJsonObject>* TargetAssetObject = nullptr;
     if ((*PayloadObject)->TryGetObjectField(TEXT("target_asset"), TargetAssetObject) && TargetAssetObject && TargetAssetObject->IsValid())
     {
@@ -109,6 +121,30 @@ bool FAutomationProtocolJson::ParseRequest(const FString& JsonText, FAutomationT
         ParsePropertyArray(ClassDefaultsArray, OutRequest.ClassDefaults);
     }
 
+    const TSharedPtr<FJsonObject>* OverridesObject = nullptr;
+    if ((*PayloadObject)->TryGetObjectField(TEXT("overrides"), OverridesObject) && OverridesObject && OverridesObject->IsValid())
+    {
+        const TArray<TSharedPtr<FJsonValue>>* ComponentOverridesArray = nullptr;
+        if ((*OverridesObject)->TryGetArrayField(TEXT("component_overrides"), ComponentOverridesArray))
+        {
+            for (const TSharedPtr<FJsonValue>& Value : *ComponentOverridesArray)
+            {
+                FAutomationComponentOverride Override;
+                if (ParseComponentOverride(Value->AsObject(), Override))
+                {
+                    OutRequest.ComponentOverrides.Add(Override);
+                }
+            }
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* ClassDefaultOverridesArray = nullptr;
+        if ((*OverridesObject)->TryGetArrayField(TEXT("class_default_overrides"), ClassDefaultOverridesArray)
+            || (*OverridesObject)->TryGetArrayField(TEXT("class_defaults"), ClassDefaultOverridesArray))
+        {
+            ParsePropertyArray(ClassDefaultOverridesArray, OutRequest.ClassDefaults);
+        }
+    }
+
     const TArray<TSharedPtr<FJsonValue>>* OperationsArray = nullptr;
     if ((*PayloadObject)->TryGetArrayField(TEXT("operations"), OperationsArray))
     {
@@ -129,6 +165,58 @@ bool FAutomationProtocolJson::ParseRequest(const FString& JsonText, FAutomationT
                 ParsePropertyArray(PropertiesArray, Operation.Properties);
             }
             OutRequest.Operations.Add(Operation);
+        }
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* ItemsArray = nullptr;
+    if ((*PayloadObject)->TryGetArrayField(TEXT("items"), ItemsArray))
+    {
+        for (const TSharedPtr<FJsonValue>& Value : *ItemsArray)
+        {
+            const TSharedPtr<FJsonObject> ItemObject = Value->AsObject();
+            if (!ItemObject.IsValid())
+            {
+                continue;
+            }
+
+            FAutomationBatchBlueprintItem Item;
+            const TSharedPtr<FJsonObject>* ItemAssetObject = nullptr;
+            if (ItemObject->TryGetObjectField(TEXT("asset"), ItemAssetObject) && ItemAssetObject && ItemAssetObject->IsValid())
+            {
+                ParseAssetSpec(*ItemAssetObject, Item.Asset);
+            }
+
+            const TSharedPtr<FJsonObject>* ItemTemplateObject = nullptr;
+            if (ItemObject->TryGetObjectField(TEXT("template"), ItemTemplateObject) && ItemTemplateObject && ItemTemplateObject->IsValid())
+            {
+                (*ItemTemplateObject)->TryGetStringField(TEXT("template_id"), Item.Template.TemplateId);
+            }
+
+            const TSharedPtr<FJsonObject>* ItemOverridesObject = nullptr;
+            if (ItemObject->TryGetObjectField(TEXT("overrides"), ItemOverridesObject) && ItemOverridesObject && ItemOverridesObject->IsValid())
+            {
+                const TArray<TSharedPtr<FJsonValue>>* ComponentOverridesArray = nullptr;
+                if ((*ItemOverridesObject)->TryGetArrayField(TEXT("component_overrides"), ComponentOverridesArray))
+                {
+                    for (const TSharedPtr<FJsonValue>& OverrideValue : *ComponentOverridesArray)
+                    {
+                        FAutomationComponentOverride Override;
+                        if (ParseComponentOverride(OverrideValue->AsObject(), Override))
+                        {
+                            Item.ComponentOverrides.Add(Override);
+                        }
+                    }
+                }
+
+                const TArray<TSharedPtr<FJsonValue>>* ClassDefaultOverridesArray = nullptr;
+                if ((*ItemOverridesObject)->TryGetArrayField(TEXT("class_default_overrides"), ClassDefaultOverridesArray)
+                    || (*ItemOverridesObject)->TryGetArrayField(TEXT("class_defaults"), ClassDefaultOverridesArray))
+                {
+                    ParsePropertyArray(ClassDefaultOverridesArray, Item.ClassDefaults);
+                }
+            }
+
+            OutRequest.BatchItems.Add(Item);
         }
     }
 
@@ -227,6 +315,46 @@ bool FAutomationProtocolJson::ParseComponentSpec(const TSharedPtr<FJsonObject>& 
     Object->TryGetStringField(TEXT("component_name"), OutSpec.ComponentName);
     Object->TryGetStringField(TEXT("component_class"), OutSpec.ComponentClass);
     Object->TryGetStringField(TEXT("attach_parent"), OutSpec.AttachParent);
+
+    const TSharedPtr<FJsonObject>* TransformObject = nullptr;
+    if (Object->TryGetObjectField(TEXT("transform"), TransformObject) && TransformObject && TransformObject->IsValid())
+    {
+        const TArray<TSharedPtr<FJsonValue>>* LocationArray = nullptr;
+        if ((*TransformObject)->TryGetArrayField(TEXT("location"), LocationArray))
+        {
+            OutSpec.Transform.bHasLocation = ParseVector(*LocationArray, OutSpec.Transform.Location);
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* RotationArray = nullptr;
+        if ((*TransformObject)->TryGetArrayField(TEXT("rotation"), RotationArray))
+        {
+            OutSpec.Transform.bHasRotation = ParseRotator(*RotationArray, OutSpec.Transform.Rotation);
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* ScaleArray = nullptr;
+        if ((*TransformObject)->TryGetArrayField(TEXT("scale"), ScaleArray))
+        {
+            OutSpec.Transform.bHasScale = ParseVector(*ScaleArray, OutSpec.Transform.Scale);
+        }
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* PropertiesArray = nullptr;
+    if (Object->TryGetArrayField(TEXT("properties"), PropertiesArray))
+    {
+        ParsePropertyArray(PropertiesArray, OutSpec.Properties);
+    }
+
+    return true;
+}
+
+bool FAutomationProtocolJson::ParseComponentOverride(const TSharedPtr<FJsonObject>& Object, FAutomationComponentOverride& OutSpec)
+{
+    if (!Object.IsValid())
+    {
+        return false;
+    }
+
+    Object->TryGetStringField(TEXT("component_name"), OutSpec.ComponentName);
 
     const TSharedPtr<FJsonObject>* TransformObject = nullptr;
     if (Object->TryGetObjectField(TEXT("transform"), TransformObject) && TransformObject && TransformObject->IsValid())

@@ -1,0 +1,47 @@
+{
+  "templates": [
+    {
+      "template_id": "actor_basic_v1",
+      "asset": {
+        "parent_class": "/Script/Engine.Actor"
+      },
+      "assembly": {
+        "root_component": {
+          "component_name": "SceneRoot",
+          "component_class": "/Script/Engine.SceneComponent"
+        },
+        "components": [
+          {
+            "component_name": "HitBox",
+            "component_class": "/Script/Engine.BoxComponent",
+            "attach_parent": "SceneRoot",
+            "transform": {
+              "location": [0, 0, 50],
+              "rotation": [0, 0, 0],
+              "scale": [1, 1, 1]
+            },
+            "properties": [
+              {
+                "name": "BoxExtent",
+                "type": "vector",
+                "value": [40, 40, 90]
+              },
+              {
+                "name": "CollisionProfileName",
+                "type": "name",
+                "value": "BlockAll"
+              }
+            ]
+          }
+        ]
+      },
+      "class_defaults": [
+        {
+          "name": "InitialLifeSpan",
+          "type": "float",
+          "value": 0.0
+        }
+      ]
+    }
+  ]
+}

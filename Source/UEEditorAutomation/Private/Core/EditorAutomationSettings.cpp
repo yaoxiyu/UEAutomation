@@ -14,7 +14,8 @@ UEditorAutomationSettings::UEditorAutomationSettings()
     ResultDir.Path = TEXT("C:/UEAutomation/results");
     LogDir.Path = TEXT("C:/UEAutomation/logs");
     WhitelistFilePath.FilePath = TEXT("Plugins/UEEditorAutomation/Config/UEEditorAutomationWhitelist.json");
+    TemplateRegistryFilePath.FilePath = TEXT("Plugins/UEEditorAutomation/Config/UEEditorAutomationTemplates.json");
 
-    // Whitelists are policy data. Prefer Config/UEEditorAutomationWhitelist.json so
-    // projects can adjust automation scope without rebuilding this editor plugin.
+    // Policy and production templates are runtime data. Keep them in Config JSON
+    // so projects can adjust automation scope without rebuilding this editor plugin.
 }

@@ -2,6 +2,7 @@
 
 #include "Application/TaskExecutor.h"
 #include "Domain/BlueprintAutomationService.h"
+#include "Domain/BlueprintTemplateRegistry.h"
 
 class FBlueprintTaskExecutorBase : public ITaskExecutor
 {
@@ -35,4 +36,32 @@ public:
     explicit FModifyBlueprintDefaultsTaskExecutor(const TSharedRef<FBlueprintAutomationService>& InService);
     virtual FString GetTaskType() const override;
     virtual bool Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+};
+
+class FCreateBlueprintFromTemplateTaskExecutor : public FBlueprintTaskExecutorBase
+{
+public:
+    explicit FCreateBlueprintFromTemplateTaskExecutor(const TSharedRef<FBlueprintAutomationService>& InService);
+    virtual FString GetTaskType() const override;
+    virtual bool Validate(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+    virtual bool Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+
+protected:
+    bool BuildExpandedRequest(const FAutomationTaskRequest& Request, FAutomationTaskRequest& OutExpandedRequest, FAutomationTaskResult& OutResult) const;
+    bool ApplyComponentOverrides(FAutomationTaskRequest& ExpandedRequest, const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) const;
+    void MergeProperties(TArray<FAutomationPropertyValue>& TargetProperties, const TArray<FAutomationPropertyValue>& OverrideProperties) const;
+
+    FBlueprintTemplateRegistry TemplateRegistry;
+};
+
+class FBatchCreateBlueprintsTaskExecutor : public FCreateBlueprintFromTemplateTaskExecutor
+{
+public:
+    explicit FBatchCreateBlueprintsTaskExecutor(const TSharedRef<FBlueprintAutomationService>& InService);
+    virtual FString GetTaskType() const override;
+    virtual bool Validate(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+    virtual bool Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+
+private:
+    FAutomationTaskRequest BuildItemRequest(const FAutomationTaskRequest& BatchRequest, const FAutomationBatchBlueprintItem& Item) const;
 };

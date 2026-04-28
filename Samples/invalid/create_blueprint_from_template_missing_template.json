@@ -1,0 +1,22 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_create_bp_from_template_missing_template_001",
+  "task_type": "create_blueprint_from_template",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "execution": {
+    "skip_if_exists": false,
+    "overwrite_if_exists": false,
+    "open_after_success": false,
+    "save_after_success": true,
+    "compile_after_create": true
+  },
+  "payload": {
+    "asset": {
+      "asset_name": "BP_TemplateMissing_001",
+      "package_path": "/Game/Blueprints/AutoGen"
+    },
+    "template": {
+      "template_id": "missing_template_v1"
+    }
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_batch_create_blueprints_actor_basic_001",
+  "task_type": "batch_create_blueprints",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "execution": {
+    "idempotency_key": "batch_create_blueprints_actor_basic_001",
+    "skip_if_exists": false,
+    "overwrite_if_exists": false,
+    "open_after_success": false,
+    "save_after_success": true,
+    "compile_after_create": true
+  },
+  "payload": {
+    "shared_template": {
+      "template_id": "actor_basic_v1"
+    },
+    "items": [
+      {
+        "asset": {
+          "asset_name": "BP_BatchTemplateActor_A_001",
+          "package_path": "/Game/Blueprints/AutoGen"
+        },
+        "overrides": {
+          "component_overrides": [
+            {
+              "component_name": "HitBox",
+              "properties": [
+                {
+                  "name": "BoxExtent",
+                  "type": "vector",
+                  "value": [30, 30, 80]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "asset": {
+          "asset_name": "BP_BatchTemplateActor_B_001",
+          "package_path": "/Game/Blueprints/AutoGen"
+        },
+        "overrides": {
+          "component_overrides": [
+            {
+              "component_name": "HitBox",
+              "properties": [
+                {
+                  "name": "BoxExtent",
+                  "type": "vector",
+                  "value": [60, 60, 140]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -13,6 +13,7 @@ public:
     bool CreateBlueprint(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult);
     bool ModifyBlueprintComponents(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult);
     bool ModifyBlueprintDefaults(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult);
+    bool DoesAssetExist(const FString& PackagePath, const FString& AssetName) const;
 
 private:
     UClass* LoadClassByPath(const FString& ClassPath, FAutomationTaskResult& OutResult, const FString& Field) const;

@@ -4,6 +4,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Core/AutomationWhitelist.h"
+#include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
@@ -149,7 +150,37 @@ bool FPropertyAssignmentService::ImportTextValue(UObject* Target, FProperty* Pro
         return false;
     }
 
-    const FString ImportText = JsonValueToImportText(PropertyValue);
+    FString ImportText;
+    const FString Type = PropertyValue.Type.ToLower();
+    if (Type == TEXT("array"))
+    {
+        if (!CastField<FArrayProperty>(Property))
+        {
+            OutError = FString::Printf(TEXT("Property '%s' is not an array property."), *PropertyValue.Name);
+            return false;
+        }
+        if (!JsonValueToImportTextForProperty(PropertyValue.Value, Property, ImportText, OutError))
+        {
+            return false;
+        }
+    }
+    else if (Type == TEXT("struct"))
+    {
+        if (!CastField<FStructProperty>(Property))
+        {
+            OutError = FString::Printf(TEXT("Property '%s' is not a struct property."), *PropertyValue.Name);
+            return false;
+        }
+        if (!JsonValueToImportTextForProperty(PropertyValue.Value, Property, ImportText, OutError))
+        {
+            return false;
+        }
+    }
+    else
+    {
+        ImportText = JsonValueToImportText(PropertyValue);
+    }
+
     if (ImportText.IsEmpty() && PropertyValue.Type != TEXT("string") && PropertyValue.Type != TEXT("text"))
     {
         OutError = FString::Printf(TEXT("Property '%s' value cannot be converted."), *PropertyValue.Name);
@@ -164,6 +195,136 @@ bool FPropertyAssignmentService::ImportTextValue(UObject* Target, FProperty* Pro
         return false;
     }
 
+    return true;
+}
+
+bool FPropertyAssignmentService::JsonValueToImportTextForProperty(const TSharedPtr<FJsonValue>& Value, FProperty* Property, FString& OutImportText, FString& OutError) const
+{
+    if (!Value.IsValid() || !Property)
+    {
+        OutError = TEXT("JSON value or target property is invalid.");
+        return false;
+    }
+
+    if (FArrayProperty* ArrayProperty = CastField<FArrayProperty>(Property))
+    {
+        if (Value->Type != EJson::Array)
+        {
+            OutError = FString::Printf(TEXT("Array property '%s' requires an array value."), *Property->GetName());
+            return false;
+        }
+        const TArray<TSharedPtr<FJsonValue>>& Array = Value->AsArray();
+        return JsonArrayToArrayImportText(Array, ArrayProperty, OutImportText, OutError);
+    }
+
+    if (CastField<FStructProperty>(Property))
+    {
+        const TSharedPtr<FJsonObject> Object = Value->AsObject();
+        if (!Object.IsValid())
+        {
+            OutError = FString::Printf(TEXT("Struct property '%s' requires an object value."), *Property->GetName());
+            return false;
+        }
+        return JsonObjectToStructImportText(Object, OutImportText, OutError);
+    }
+
+    if (CastField<FNameProperty>(Property))
+    {
+        OutImportText = Value->AsString();
+        return !OutImportText.IsEmpty() || Value->Type == EJson::String;
+    }
+
+    if (CastField<FStrProperty>(Property))
+    {
+        OutImportText = EscapeImportString(Value->AsString());
+        return true;
+    }
+
+    if (CastField<FTextProperty>(Property))
+    {
+        OutImportText = EscapeImportString(Value->AsString());
+        return true;
+    }
+
+    if (CastField<FBoolProperty>(Property))
+    {
+        OutImportText = Value->AsBool() ? TEXT("True") : TEXT("False");
+        return true;
+    }
+
+    if (CastField<FNumericProperty>(Property))
+    {
+        OutImportText = FString::SanitizeFloat(Value->AsNumber());
+        return true;
+    }
+
+    OutError = FString::Printf(TEXT("Property '%s' does not support array/struct JSON conversion."), *Property->GetName());
+    return false;
+}
+
+bool FPropertyAssignmentService::JsonObjectToStructImportText(const TSharedPtr<FJsonObject>& Object, FString& OutImportText, FString& OutError) const
+{
+    if (!Object.IsValid())
+    {
+        OutError = TEXT("Struct value must be a JSON object.");
+        return false;
+    }
+
+    TArray<FString> Fields;
+    for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Object->Values)
+    {
+        if (!Pair.Value.IsValid())
+        {
+            continue;
+        }
+
+        FString ValueText;
+        if (Pair.Value->Type == EJson::String)
+        {
+            ValueText = EscapeImportString(Pair.Value->AsString());
+        }
+        else if (Pair.Value->Type == EJson::Boolean)
+        {
+            ValueText = Pair.Value->AsBool() ? TEXT("True") : TEXT("False");
+        }
+        else if (Pair.Value->Type == EJson::Number)
+        {
+            ValueText = FString::SanitizeFloat(Pair.Value->AsNumber());
+        }
+        else
+        {
+            OutError = FString::Printf(TEXT("Struct field '%s' only supports scalar JSON values in Phase 2."), *Pair.Key);
+            return false;
+        }
+
+        Fields.Add(FString::Printf(TEXT("%s=%s"), *Pair.Key, *ValueText));
+    }
+
+    OutImportText = FString::Printf(TEXT("(%s)"), *FString::Join(Fields, TEXT(",")));
+    return true;
+}
+
+bool FPropertyAssignmentService::JsonArrayToArrayImportText(const TArray<TSharedPtr<FJsonValue>>& Array, FArrayProperty* Property, FString& OutImportText, FString& OutError) const
+{
+    if (!Property || !Property->Inner)
+    {
+        OutError = TEXT("Array property has no inner property.");
+        return false;
+    }
+
+    TArray<FString> Elements;
+    for (int32 Index = 0; Index < Array.Num(); ++Index)
+    {
+        FString ElementText;
+        if (!JsonValueToImportTextForProperty(Array[Index], Property->Inner, ElementText, OutError))
+        {
+            OutError = FString::Printf(TEXT("Array element %d is invalid: %s"), Index, *OutError);
+            return false;
+        }
+        Elements.Add(ElementText);
+    }
+
+    OutImportText = FString::Printf(TEXT("(%s)"), *FString::Join(Elements, TEXT(",")));
     return true;
 }
 
@@ -268,4 +429,12 @@ FString FPropertyAssignmentService::NormalizeObjectPath(const FString& ObjectPat
         return ObjectPath.Mid(FirstQuote + 1, LastQuote - FirstQuote - 1);
     }
     return ObjectPath;
+}
+
+FString FPropertyAssignmentService::EscapeImportString(const FString& Value) const
+{
+    FString Escaped = Value;
+    Escaped.ReplaceInline(TEXT("\\"), TEXT("\\\\"));
+    Escaped.ReplaceInline(TEXT("\""), TEXT("\\\""));
+    return FString::Printf(TEXT("\"%s\""), *Escaped);
 }

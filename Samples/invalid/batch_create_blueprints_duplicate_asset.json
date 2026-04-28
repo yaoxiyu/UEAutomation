@@ -1,0 +1,32 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_batch_create_blueprints_duplicate_asset_001",
+  "task_type": "batch_create_blueprints",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "execution": {
+    "skip_if_exists": false,
+    "overwrite_if_exists": false,
+    "open_after_success": false,
+    "save_after_success": true,
+    "compile_after_create": true
+  },
+  "payload": {
+    "shared_template": {
+      "template_id": "actor_basic_v1"
+    },
+    "items": [
+      {
+        "asset": {
+          "asset_name": "BP_BatchDuplicate_001",
+          "package_path": "/Game/Blueprints/AutoGen"
+        }
+      },
+      {
+        "asset": {
+          "asset_name": "BP_BatchDuplicate_001",
+          "package_path": "/Game/Blueprints/AutoGen"
+        }
+      }
+    ]
+  }
+}

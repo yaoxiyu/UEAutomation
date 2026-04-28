@@ -197,6 +197,11 @@ bool FBlueprintAutomationService::ModifyBlueprintDefaults(const FAutomationTaskR
     return true;
 }
 
+bool FBlueprintAutomationService::DoesAssetExist(const FString& PackagePath, const FString& AssetName) const
+{
+    return BlueprintAdapter->DoesAssetExist(PackagePath, AssetName);
+}
+
 UClass* FBlueprintAutomationService::LoadClassByPath(const FString& ClassPath, FAutomationTaskResult& OutResult, const FString& Field) const
 {
     const FAutomationWhitelist Whitelist = FAutomationWhitelistProvider::Load();

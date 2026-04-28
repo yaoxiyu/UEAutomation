@@ -1,6 +1,8 @@
 {
   "allowed_task_types": [
     "create_blueprint",
+    "create_blueprint_from_template",
+    "batch_create_blueprints",
     "modify_blueprint_components",
     "modify_blueprint_defaults"
   ],
@@ -35,6 +37,7 @@
     "CapsuleRadius",
     "CapsuleHalfHeight",
     "CollisionProfileName",
+    "Tags",
     "InitialLifeSpan",
     "bCanBeDamaged",
     "MaxHealth",

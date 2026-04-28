@@ -44,4 +44,7 @@ public:
 
     UPROPERTY(Config, EditAnywhere, Category="Security")
     FFilePath WhitelistFilePath;
+
+    UPROPERTY(Config, EditAnywhere, Category="Templates")
+    FFilePath TemplateRegistryFilePath;
 };

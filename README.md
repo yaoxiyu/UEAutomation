@@ -2,6 +2,16 @@
 
 UE Editor C++ plugin for declarative Blueprint asset automation.
 
+## Current Status
+
+For the real local implementation state of Phase 1 and Phase 2, read:
+
+```text
+Docs/Current_Implementation_Status.md
+```
+
+That document is the fast orientation entry point for future AI agents. It separates what is implemented and validated from broader design goals.
+
 ## Phase 1 Scope
 
 - File polling daemon
@@ -15,6 +25,20 @@ UE Editor C++ plugin for declarative Blueprint asset automation.
 - Structured `*.result.json`
 
 Graph node generation, pin wiring, UI automation, socket/http transport, and broad reflection writes are intentionally out of scope.
+
+## Phase 2 Template Scope
+
+The first Phase 2 slice adds template-driven Blueprint creation:
+
+- `create_blueprint_from_template`
+- `batch_create_blueprints`
+- Runtime template registry JSON
+- Component property / transform overrides
+- Class default overrides
+- Controlled `array` and JSON-object `struct` property imports
+- Debug panel MVP for recent result/log inspection
+
+Template tasks expand to the same domain service path as `create_blueprint`, so compile, save, open, whitelist, property assignment, and result output behavior stays consistent.
 
 ## Default Task Directories
 
@@ -69,6 +93,16 @@ The whitelist file controls:
 - allowed property names
 
 Edit the JSON whitelist instead of recompiling C++ when broadening automation scope.
+
+Blueprint templates are loaded at runtime from:
+
+```text
+Plugins/UEEditorAutomation/Config/UEEditorAutomationTemplates.json
+```
+
+Template registry entries define a stable component tree and optional class defaults. Task payload overrides may replace component properties, component transform fields, and class defaults by property name.
+
+The Phase 2 property expansion intentionally stays bounded: `array` is accepted only when the target UE property is an array, and `struct` is accepted only when the target UE property is a struct and the JSON value is an object with scalar fields.
 
 ## Integration
 
