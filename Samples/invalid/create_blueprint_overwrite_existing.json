@@ -1,0 +1,43 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_create_bp_overwrite_existing_sample",
+  "task_type": "create_blueprint",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "source": {
+    "agent": "codex",
+    "session_id": "local",
+    "user": "dev"
+  },
+  "execution": {
+    "priority": "normal",
+    "idempotency_key": "bp_auto_actor_overwrite_existing_sample",
+    "skip_if_exists": false,
+    "overwrite_if_exists": true,
+    "open_after_success": false,
+    "save_after_success": true,
+    "compile_after_create": true
+  },
+  "payload": {
+    "asset": {
+      "asset_type": "blueprint",
+      "asset_name": "BP_AutoActor",
+      "package_path": "/Game/Blueprints/AutoGen",
+      "parent_class": "/Script/Engine.Actor",
+      "blueprint_type": "normal"
+    },
+    "assembly": {
+      "root_component": {
+        "component_name": "SceneRoot",
+        "component_class": "/Script/Engine.SceneComponent",
+        "transform": {
+          "location": [0, 0, 0],
+          "rotation": [0, 0, 0],
+          "scale": [1, 1, 1]
+        },
+        "properties": []
+      },
+      "components": []
+    },
+    "class_default_overrides": []
+  }
+}

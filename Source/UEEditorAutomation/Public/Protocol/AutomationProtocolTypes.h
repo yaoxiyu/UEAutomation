@@ -109,11 +109,13 @@ struct FAutomationTaskResult
     TArray<FAutomationAssetOutput> AssetOutputs;
     TArray<FString> Warnings;
     TArray<FAutomationError> Errors;
+    TArray<FString> LogLines;
     FAutomationMetrics Metrics;
     FString LogPath;
 
     void AddError(const FString& Code, const FString& Message, const FString& Field = FString());
     void AddWarning(const FString& Message);
+    void AddLog(const FString& Message);
 };
 
 class FAutomationProtocolJson

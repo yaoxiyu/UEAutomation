@@ -42,6 +42,8 @@ Samples/invalid/
 
 Use the invalid samples to verify structured error output after changing whitelist policy or task parsing.
 
+`Samples/valid/create_blueprint_skip_if_exists.json` verifies create idempotency for an existing `BP_AutoActor`.
+
 ## Configuration
 
 Project settings are exposed by `UEditorAutomationSettings`:

@@ -22,6 +22,11 @@ void FAutomationTaskResult::AddWarning(const FString& Message)
     Metrics.WarningCount = Warnings.Num();
 }
 
+void FAutomationTaskResult::AddLog(const FString& Message)
+{
+    LogLines.Add(Message);
+}
+
 bool FAutomationProtocolJson::ParseRequest(const FString& JsonText, FAutomationTaskRequest& OutRequest, FAutomationTaskResult& OutResult)
 {
     TSharedPtr<FJsonObject> Root;

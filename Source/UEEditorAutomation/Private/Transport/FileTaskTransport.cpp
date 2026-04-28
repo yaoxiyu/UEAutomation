@@ -73,6 +73,10 @@ bool FFileTaskResultSink::WriteResult(FAutomationTaskResult& Result) const
     LogText += FString::Printf(TEXT("status=%s\n"), *Result.Status);
     LogText += FString::Printf(TEXT("success=%s\n"), Result.bSuccess ? TEXT("true") : TEXT("false"));
     LogText += FString::Printf(TEXT("duration_ms=%lld\n"), Result.Metrics.DurationMs);
+    for (const FString& Line : Result.LogLines)
+    {
+        LogText += FString::Printf(TEXT("step=%s\n"), *Line);
+    }
     for (const FString& Warning : Result.Warnings)
     {
         LogText += FString::Printf(TEXT("warning=%s\n"), *Warning);

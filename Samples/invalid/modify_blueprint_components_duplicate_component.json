@@ -1,0 +1,37 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_modify_bp_components_duplicate_component_sample",
+  "task_type": "modify_blueprint_components",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "execution": {
+    "save_after_success": true,
+    "compile_after_create": true
+  },
+  "payload": {
+    "target_asset": {
+      "asset_path": "/Game/Blueprints/AutoGen/BP_AutoActor.BP_AutoActor"
+    },
+    "operations": [
+      {
+        "op": "add_component",
+        "component_name": "HitBox",
+        "component_class": "/Script/Engine.BoxComponent",
+        "attach_parent": "SceneRoot",
+        "transform": {
+          "location": [0, 0, 90],
+          "rotation": [0, 0, 0],
+          "scale": [1, 1, 1]
+        },
+        "properties": []
+      }
+    ],
+    "post_actions": [
+      {
+        "action": "compile_blueprint"
+      },
+      {
+        "action": "save_asset"
+      }
+    ]
+  }
+}

@@ -11,26 +11,35 @@ FBlueprintAutomationService::FBlueprintAutomationService(const TSharedRef<IBluep
 
 bool FBlueprintAutomationService::CreateBlueprint(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
 {
+    OutResult.AddLog(TEXT("create_blueprint: validate asset fields"));
     if (Request.Asset.AssetName.IsEmpty() || Request.Asset.PackagePath.IsEmpty() || Request.Asset.ParentClass.IsEmpty())
     {
         OutResult.AddError(TEXT("MissingRequiredField"), TEXT("asset_name, package_path and parent_class are required."), TEXT("payload.asset"));
         return false;
     }
 
+    OutResult.AddLog(FString::Printf(TEXT("create_blueprint: check existing asset %s/%s"), *Request.Asset.PackagePath, *Request.Asset.AssetName));
     if (BlueprintAdapter->DoesAssetExist(Request.Asset.PackagePath, Request.Asset.AssetName))
     {
         if (Request.Execution.bSkipIfExists)
         {
             OutResult.AddWarning(FString::Printf(TEXT("Asset '%s/%s' already exists; skipped."), *Request.Asset.PackagePath, *Request.Asset.AssetName));
-            OutResult.bSuccess = true;
-            OutResult.Status = TEXT("succeeded");
+            OutResult.AddLog(TEXT("create_blueprint: existing asset skipped by idempotency policy"));
+            AddCreatedAssetOutput(Request, OutResult);
             return true;
+        }
+
+        if (Request.Execution.bOverwriteIfExists)
+        {
+            OutResult.AddError(TEXT("OverwriteNotSupported"), TEXT("overwrite_if_exists is not supported for create_blueprint in Phase 1."), TEXT("execution.overwrite_if_exists"));
+            return false;
         }
 
         OutResult.AddError(TEXT("AssetAlreadyExists"), FString::Printf(TEXT("Asset '%s/%s' already exists."), *Request.Asset.PackagePath, *Request.Asset.AssetName), TEXT("payload.asset"));
         return false;
     }
 
+    OutResult.AddLog(FString::Printf(TEXT("create_blueprint: load parent class %s"), *Request.Asset.ParentClass));
     UClass* ParentClass = LoadClassByPath(Request.Asset.ParentClass, OutResult, TEXT("payload.asset.parent_class"));
     if (!ParentClass)
     {
@@ -38,6 +47,7 @@ bool FBlueprintAutomationService::CreateBlueprint(const FAutomationTaskRequest& 
     }
 
     FString Error;
+    OutResult.AddLog(TEXT("create_blueprint: create Blueprint asset"));
     UBlueprint* Blueprint = BlueprintAdapter->CreateBlueprintAsset(Request.Asset.PackagePath, Request.Asset.AssetName, ParentClass, Error);
     if (!Blueprint)
     {
@@ -47,6 +57,7 @@ bool FBlueprintAutomationService::CreateBlueprint(const FAutomationTaskRequest& 
 
     if (!Request.RootComponent.ComponentName.IsEmpty())
     {
+        OutResult.AddLog(FString::Printf(TEXT("create_blueprint: add root component %s"), *Request.RootComponent.ComponentName));
         if (!AddComponent(Blueprint, Request.RootComponent, OutResult, TEXT("payload.assembly.root_component")))
         {
             return false;
@@ -55,6 +66,7 @@ bool FBlueprintAutomationService::CreateBlueprint(const FAutomationTaskRequest& 
 
     for (int32 Index = 0; Index < Request.Components.Num(); ++Index)
     {
+        OutResult.AddLog(FString::Printf(TEXT("create_blueprint: add component %s"), *Request.Components[Index].ComponentName));
         if (!AddComponent(Blueprint, Request.Components[Index], OutResult, FString::Printf(TEXT("payload.assembly.components[%d]"), Index)))
         {
             return false;
@@ -68,6 +80,7 @@ bool FBlueprintAutomationService::CreateBlueprint(const FAutomationTaskRequest& 
 
     if (Request.ClassDefaults.Num() > 0)
     {
+        OutResult.AddLog(FString::Printf(TEXT("create_blueprint: assign %d class default properties"), Request.ClassDefaults.Num()));
         UObject* CDO = Blueprint->GeneratedClass ? Blueprint->GeneratedClass->GetDefaultObject() : nullptr;
         if (!PropertyAssignmentService.AssignProperties(CDO, Request.ClassDefaults, OutResult, TEXT("payload.class_default_overrides")))
         {
@@ -90,17 +103,14 @@ bool FBlueprintAutomationService::CreateBlueprint(const FAutomationTaskRequest& 
         return false;
     }
 
-    FAutomationAssetOutput Output;
-    Output.AssetPath = FString::Printf(TEXT("%s/%s.%s"), *Request.Asset.PackagePath, *Request.Asset.AssetName, *Request.Asset.AssetName);
-    Output.AssetName = Request.Asset.AssetName;
-    Output.AssetType = TEXT("blueprint");
-    OutResult.AssetOutputs.Add(Output);
+    AddCreatedAssetOutput(Request, OutResult);
     return true;
 }
 
 bool FBlueprintAutomationService::ModifyBlueprintComponents(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
 {
     FString Error;
+    OutResult.AddLog(FString::Printf(TEXT("modify_blueprint_components: load target asset %s"), *Request.TargetAsset.AssetPath));
     UBlueprint* Blueprint = BlueprintAdapter->LoadBlueprintAsset(Request.TargetAsset.AssetPath, Error);
     if (!Blueprint)
     {
@@ -114,6 +124,7 @@ bool FBlueprintAutomationService::ModifyBlueprintComponents(const FAutomationTas
         const FString FieldPrefix = FString::Printf(TEXT("payload.operations[%d]"), Index);
         if (Operation.Op == TEXT("add_component"))
         {
+            OutResult.AddLog(FString::Printf(TEXT("modify_blueprint_components: add component %s"), *Operation.Component.ComponentName));
             if (!AddComponent(Blueprint, Operation.Component, OutResult, FieldPrefix))
             {
                 return false;
@@ -121,6 +132,7 @@ bool FBlueprintAutomationService::ModifyBlueprintComponents(const FAutomationTas
         }
         else if (Operation.Op == TEXT("update_component_properties"))
         {
+            OutResult.AddLog(FString::Printf(TEXT("modify_blueprint_components: update properties for %s"), *Operation.Component.ComponentName));
             UObject* Template = BlueprintAdapter->GetComponentTemplate(Blueprint, Operation.Component.ComponentName, Error);
             if (!Template)
             {
@@ -151,6 +163,7 @@ bool FBlueprintAutomationService::ModifyBlueprintComponents(const FAutomationTas
 bool FBlueprintAutomationService::ModifyBlueprintDefaults(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
 {
     FString Error;
+    OutResult.AddLog(FString::Printf(TEXT("modify_blueprint_defaults: load target asset %s"), *Request.TargetAsset.AssetPath));
     UBlueprint* Blueprint = BlueprintAdapter->LoadBlueprintAsset(Request.TargetAsset.AssetPath, Error);
     if (!Blueprint)
     {
@@ -164,6 +177,7 @@ bool FBlueprintAutomationService::ModifyBlueprintDefaults(const FAutomationTaskR
     }
 
     UObject* CDO = Blueprint->GeneratedClass ? Blueprint->GeneratedClass->GetDefaultObject() : nullptr;
+    OutResult.AddLog(FString::Printf(TEXT("modify_blueprint_defaults: assign %d class default properties"), Request.ClassDefaults.Num()));
     if (!PropertyAssignmentService.AssignProperties(CDO, Request.ClassDefaults, OutResult, TEXT("payload.class_defaults")))
     {
         return false;
@@ -209,6 +223,7 @@ UClass* FBlueprintAutomationService::LoadClassByPath(const FString& ClassPath, F
 
 bool FBlueprintAutomationService::AddComponent(UBlueprint* Blueprint, const FAutomationComponentSpec& Component, FAutomationTaskResult& OutResult, const FString& FieldPrefix)
 {
+    OutResult.AddLog(FString::Printf(TEXT("component: load class %s"), *Component.ComponentClass));
     UClass* ComponentClass = LoadClassByPath(Component.ComponentClass, OutResult, FieldPrefix + TEXT(".component_class"));
     if (!ComponentClass)
     {
@@ -216,6 +231,7 @@ bool FBlueprintAutomationService::AddComponent(UBlueprint* Blueprint, const FAut
     }
 
     FString Error;
+    OutResult.AddLog(FString::Printf(TEXT("component: create SCS node %s"), *Component.ComponentName));
     if (!BlueprintAdapter->AddComponentNode(Blueprint, ComponentClass, Component.ComponentName, Component.AttachParent, Error))
     {
         const FString Code = Error.Contains(TEXT("Duplicate")) ? TEXT("DuplicateComponentName") : TEXT("AttachParentNotFound");
@@ -237,6 +253,7 @@ bool FBlueprintAutomationService::AddComponent(UBlueprint* Blueprint, const FAut
         return false;
     }
 
+    OutResult.AddLog(FString::Printf(TEXT("component: assign %d properties to %s"), Component.Properties.Num(), *Component.ComponentName));
     return PropertyAssignmentService.AssignProperties(Template, Component.Properties, OutResult, FieldPrefix + TEXT(".properties"));
 }
 
@@ -276,6 +293,15 @@ void FBlueprintAutomationService::AddTargetAssetOutput(const FAutomationTaskRequ
     OutResult.AssetOutputs.Add(Output);
 }
 
+void FBlueprintAutomationService::AddCreatedAssetOutput(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) const
+{
+    FAutomationAssetOutput Output;
+    Output.AssetPath = FString::Printf(TEXT("%s/%s.%s"), *Request.Asset.PackagePath, *Request.Asset.AssetName, *Request.Asset.AssetName);
+    Output.AssetName = Request.Asset.AssetName;
+    Output.AssetType = TEXT("blueprint");
+    OutResult.AssetOutputs.Add(Output);
+}
+
 bool FBlueprintAutomationService::CompileIfRequested(UBlueprint* Blueprint, bool bCompile, FAutomationTaskResult& OutResult)
 {
     if (!bCompile)
@@ -284,6 +310,7 @@ bool FBlueprintAutomationService::CompileIfRequested(UBlueprint* Blueprint, bool
     }
 
     FString Error;
+    OutResult.AddLog(TEXT("blueprint: compile"));
     const double StartSeconds = FPlatformTime::Seconds();
     if (!BlueprintAdapter->CompileBlueprint(Blueprint, Error))
     {
@@ -302,6 +329,7 @@ bool FBlueprintAutomationService::SaveIfRequested(UBlueprint* Blueprint, bool bS
     }
 
     FString Error;
+    OutResult.AddLog(TEXT("blueprint: save asset"));
     const double StartSeconds = FPlatformTime::Seconds();
     if (!BlueprintAdapter->SaveAsset(Blueprint, Error))
     {
