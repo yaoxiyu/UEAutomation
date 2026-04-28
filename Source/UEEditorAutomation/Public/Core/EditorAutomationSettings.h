@@ -1,0 +1,59 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Engine/DeveloperSettings.h"
+#include "EditorAutomationSettings.generated.h"
+
+UCLASS(Config=Editor, DefaultConfig, meta=(DisplayName="UE Editor Automation"))
+class UEEDITORAUTOMATION_API UEditorAutomationSettings : public UDeveloperSettings
+{
+    GENERATED_BODY()
+
+public:
+    UEditorAutomationSettings();
+
+    UPROPERTY(Config, EditAnywhere, Category="Daemon")
+    bool bEnableDaemon;
+
+    UPROPERTY(Config, EditAnywhere, Category="Daemon", meta=(ClampMin="0.1"))
+    float PollIntervalSeconds;
+
+    UPROPERTY(Config, EditAnywhere, Category="Execution", meta=(ClampMin="1", ClampMax="1"))
+    int32 MaxConcurrentTasks;
+
+    UPROPERTY(Config, EditAnywhere, Category="Paths")
+    FDirectoryPath TaskInboxDir;
+
+    UPROPERTY(Config, EditAnywhere, Category="Paths")
+    FDirectoryPath TaskWorkingDir;
+
+    UPROPERTY(Config, EditAnywhere, Category="Paths")
+    FDirectoryPath TaskDoneDir;
+
+    UPROPERTY(Config, EditAnywhere, Category="Paths")
+    FDirectoryPath TaskFailedDir;
+
+    UPROPERTY(Config, EditAnywhere, Category="Paths")
+    FDirectoryPath ResultDir;
+
+    UPROPERTY(Config, EditAnywhere, Category="Paths")
+    FDirectoryPath LogDir;
+
+    UPROPERTY(Config, EditAnywhere, Category="Protocol")
+    int32 SupportedProtocolVersion;
+
+    UPROPERTY(Config, EditAnywhere, Category="Security")
+    TArray<FString> AllowedTaskTypes;
+
+    UPROPERTY(Config, EditAnywhere, Category="Security")
+    TArray<FString> AllowedAssetRoots;
+
+    UPROPERTY(Config, EditAnywhere, Category="Security")
+    TArray<FString> AllowedParentClasses;
+
+    UPROPERTY(Config, EditAnywhere, Category="Security")
+    TArray<FString> AllowedComponentClasses;
+
+    UPROPERTY(Config, EditAnywhere, Category="Security")
+    TArray<FString> AllowedPropertyNames;
+};

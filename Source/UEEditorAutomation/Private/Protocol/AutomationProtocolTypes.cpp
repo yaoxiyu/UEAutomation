@@ -1,0 +1,300 @@
+#include "Protocol/AutomationProtocolTypes.h"
+
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+
+void FAutomationTaskResult::AddError(const FString& Code, const FString& Message, const FString& Field)
+{
+    FAutomationError Error;
+    Error.Code = Code;
+    Error.Message = Message;
+    Error.Field = Field;
+    Errors.Add(Error);
+    Metrics.ErrorCount = Errors.Num();
+    bSuccess = false;
+    Status = TEXT("failed");
+}
+
+void FAutomationTaskResult::AddWarning(const FString& Message)
+{
+    Warnings.Add(Message);
+    Metrics.WarningCount = Warnings.Num();
+}
+
+bool FAutomationProtocolJson::ParseRequest(const FString& JsonText, FAutomationTaskRequest& OutRequest, FAutomationTaskResult& OutResult)
+{
+    TSharedPtr<FJsonObject> Root;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonText);
+    if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+    {
+        OutResult.AddError(TEXT("MalformedJson"), TEXT("Task file is not valid JSON."));
+        return false;
+    }
+
+    double ProtocolVersion = 0.0;
+    Root->TryGetNumberField(TEXT("protocol_version"), ProtocolVersion);
+    OutRequest.ProtocolVersion = static_cast<int32>(ProtocolVersion);
+    Root->TryGetStringField(TEXT("task_id"), OutRequest.TaskId);
+    Root->TryGetStringField(TEXT("task_type"), OutRequest.TaskType);
+    Root->TryGetStringField(TEXT("timestamp_utc"), OutRequest.TimestampUtc);
+
+    OutResult.ProtocolVersion = OutRequest.ProtocolVersion;
+    OutResult.TaskId = OutRequest.TaskId;
+    OutResult.TaskType = OutRequest.TaskType;
+
+    const TSharedPtr<FJsonObject>* ExecutionObject = nullptr;
+    if (Root->TryGetObjectField(TEXT("execution"), ExecutionObject) && ExecutionObject && ExecutionObject->IsValid())
+    {
+        (*ExecutionObject)->TryGetStringField(TEXT("priority"), OutRequest.Execution.Priority);
+        (*ExecutionObject)->TryGetStringField(TEXT("idempotency_key"), OutRequest.Execution.IdempotencyKey);
+        (*ExecutionObject)->TryGetBoolField(TEXT("skip_if_exists"), OutRequest.Execution.bSkipIfExists);
+        (*ExecutionObject)->TryGetBoolField(TEXT("overwrite_if_exists"), OutRequest.Execution.bOverwriteIfExists);
+        (*ExecutionObject)->TryGetBoolField(TEXT("open_after_success"), OutRequest.Execution.bOpenAfterSuccess);
+        (*ExecutionObject)->TryGetBoolField(TEXT("save_after_success"), OutRequest.Execution.bSaveAfterSuccess);
+        (*ExecutionObject)->TryGetBoolField(TEXT("compile_after_create"), OutRequest.Execution.bCompileAfterCreate);
+    }
+
+    const TSharedPtr<FJsonObject>* PayloadObject = nullptr;
+    if (!Root->TryGetObjectField(TEXT("payload"), PayloadObject) || !PayloadObject || !PayloadObject->IsValid())
+    {
+        OutResult.AddError(TEXT("MissingRequiredField"), TEXT("Missing payload object."), TEXT("payload"));
+        return false;
+    }
+
+    const TSharedPtr<FJsonObject>* AssetObject = nullptr;
+    if ((*PayloadObject)->TryGetObjectField(TEXT("asset"), AssetObject) && AssetObject && AssetObject->IsValid())
+    {
+        ParseAssetSpec(*AssetObject, OutRequest.Asset);
+    }
+
+    const TSharedPtr<FJsonObject>* TargetAssetObject = nullptr;
+    if ((*PayloadObject)->TryGetObjectField(TEXT("target_asset"), TargetAssetObject) && TargetAssetObject && TargetAssetObject->IsValid())
+    {
+        ParseAssetSpec(*TargetAssetObject, OutRequest.TargetAsset);
+    }
+
+    const TSharedPtr<FJsonObject>* AssemblyObject = nullptr;
+    if ((*PayloadObject)->TryGetObjectField(TEXT("assembly"), AssemblyObject) && AssemblyObject && AssemblyObject->IsValid())
+    {
+        const TSharedPtr<FJsonObject>* RootComponentObject = nullptr;
+        if ((*AssemblyObject)->TryGetObjectField(TEXT("root_component"), RootComponentObject) && RootComponentObject && RootComponentObject->IsValid())
+        {
+            ParseComponentSpec(*RootComponentObject, OutRequest.RootComponent);
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* ComponentsArray = nullptr;
+        if ((*AssemblyObject)->TryGetArrayField(TEXT("components"), ComponentsArray))
+        {
+            for (const TSharedPtr<FJsonValue>& Value : *ComponentsArray)
+            {
+                FAutomationComponentSpec Spec;
+                if (ParseComponentSpec(Value->AsObject(), Spec))
+                {
+                    OutRequest.Components.Add(Spec);
+                }
+            }
+        }
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* ClassDefaultsArray = nullptr;
+    if ((*PayloadObject)->TryGetArrayField(TEXT("class_default_overrides"), ClassDefaultsArray)
+        || (*PayloadObject)->TryGetArrayField(TEXT("class_defaults"), ClassDefaultsArray))
+    {
+        ParsePropertyArray(ClassDefaultsArray, OutRequest.ClassDefaults);
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* OperationsArray = nullptr;
+    if ((*PayloadObject)->TryGetArrayField(TEXT("operations"), OperationsArray))
+    {
+        for (const TSharedPtr<FJsonValue>& Value : *OperationsArray)
+        {
+            const TSharedPtr<FJsonObject> OperationObject = Value->AsObject();
+            if (!OperationObject.IsValid())
+            {
+                continue;
+            }
+
+            FAutomationOperation Operation;
+            OperationObject->TryGetStringField(TEXT("op"), Operation.Op);
+            ParseComponentSpec(OperationObject, Operation.Component);
+            const TArray<TSharedPtr<FJsonValue>>* PropertiesArray = nullptr;
+            if (OperationObject->TryGetArrayField(TEXT("properties"), PropertiesArray))
+            {
+                ParsePropertyArray(PropertiesArray, Operation.Properties);
+            }
+            OutRequest.Operations.Add(Operation);
+        }
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* PostActionsArray = nullptr;
+    if ((*PayloadObject)->TryGetArrayField(TEXT("post_actions"), PostActionsArray))
+    {
+        for (const TSharedPtr<FJsonValue>& Value : *PostActionsArray)
+        {
+            const TSharedPtr<FJsonObject> ActionObject = Value->AsObject();
+            FString Action;
+            if (ActionObject.IsValid() && ActionObject->TryGetStringField(TEXT("action"), Action))
+            {
+                OutRequest.PostActions.Add(Action);
+            }
+        }
+    }
+
+    return true;
+}
+
+bool FAutomationProtocolJson::SerializeResult(const FAutomationTaskResult& Result, FString& OutJsonText)
+{
+    const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+    Root->SetNumberField(TEXT("protocol_version"), Result.ProtocolVersion);
+    Root->SetStringField(TEXT("task_id"), Result.TaskId);
+    Root->SetStringField(TEXT("task_type"), Result.TaskType);
+    Root->SetBoolField(TEXT("success"), Result.bSuccess);
+    Root->SetStringField(TEXT("status"), Result.Status);
+
+    TArray<TSharedPtr<FJsonValue>> AssetOutputs;
+    for (const FAutomationAssetOutput& Output : Result.AssetOutputs)
+    {
+        const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
+        Object->SetStringField(TEXT("asset_path"), Output.AssetPath);
+        Object->SetStringField(TEXT("asset_name"), Output.AssetName);
+        Object->SetStringField(TEXT("asset_type"), Output.AssetType);
+        AssetOutputs.Add(MakeShared<FJsonValueObject>(Object));
+    }
+    Root->SetArrayField(TEXT("asset_outputs"), AssetOutputs);
+
+    TArray<TSharedPtr<FJsonValue>> Warnings;
+    for (const FString& Warning : Result.Warnings)
+    {
+        Warnings.Add(MakeShared<FJsonValueString>(Warning));
+    }
+    Root->SetArrayField(TEXT("warnings"), Warnings);
+
+    TArray<TSharedPtr<FJsonValue>> Errors;
+    for (const FAutomationError& Error : Result.Errors)
+    {
+        const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
+        Object->SetStringField(TEXT("code"), Error.Code);
+        Object->SetStringField(TEXT("message"), Error.Message);
+        Object->SetStringField(TEXT("field"), Error.Field);
+        Errors.Add(MakeShared<FJsonValueObject>(Object));
+    }
+    Root->SetArrayField(TEXT("errors"), Errors);
+
+    const TSharedRef<FJsonObject> Metrics = MakeShared<FJsonObject>();
+    Metrics->SetNumberField(TEXT("duration_ms"), Result.Metrics.DurationMs);
+    Metrics->SetNumberField(TEXT("compile_duration_ms"), Result.Metrics.CompileDurationMs);
+    Metrics->SetNumberField(TEXT("save_duration_ms"), Result.Metrics.SaveDurationMs);
+    Metrics->SetNumberField(TEXT("component_create_count"), Result.Metrics.ComponentCreateCount);
+    Metrics->SetNumberField(TEXT("property_assign_count"), Result.Metrics.PropertyAssignCount);
+    Metrics->SetNumberField(TEXT("warning_count"), Result.Metrics.WarningCount);
+    Metrics->SetNumberField(TEXT("error_count"), Result.Metrics.ErrorCount);
+    Root->SetObjectField(TEXT("metrics"), Metrics);
+    Root->SetStringField(TEXT("log_path"), Result.LogPath);
+
+    const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&OutJsonText);
+    return FJsonSerializer::Serialize(Root, Writer);
+}
+
+bool FAutomationProtocolJson::ParseAssetSpec(const TSharedPtr<FJsonObject>& Object, FAutomationAssetSpec& OutSpec)
+{
+    if (!Object.IsValid())
+    {
+        return false;
+    }
+    Object->TryGetStringField(TEXT("asset_type"), OutSpec.AssetType);
+    Object->TryGetStringField(TEXT("asset_name"), OutSpec.AssetName);
+    Object->TryGetStringField(TEXT("package_path"), OutSpec.PackagePath);
+    Object->TryGetStringField(TEXT("asset_path"), OutSpec.AssetPath);
+    Object->TryGetStringField(TEXT("parent_class"), OutSpec.ParentClass);
+    Object->TryGetStringField(TEXT("blueprint_type"), OutSpec.BlueprintType);
+    return true;
+}
+
+bool FAutomationProtocolJson::ParseComponentSpec(const TSharedPtr<FJsonObject>& Object, FAutomationComponentSpec& OutSpec)
+{
+    if (!Object.IsValid())
+    {
+        return false;
+    }
+
+    Object->TryGetStringField(TEXT("component_name"), OutSpec.ComponentName);
+    Object->TryGetStringField(TEXT("component_class"), OutSpec.ComponentClass);
+    Object->TryGetStringField(TEXT("attach_parent"), OutSpec.AttachParent);
+
+    const TSharedPtr<FJsonObject>* TransformObject = nullptr;
+    if (Object->TryGetObjectField(TEXT("transform"), TransformObject) && TransformObject && TransformObject->IsValid())
+    {
+        const TArray<TSharedPtr<FJsonValue>>* LocationArray = nullptr;
+        if ((*TransformObject)->TryGetArrayField(TEXT("location"), LocationArray))
+        {
+            OutSpec.Transform.bHasLocation = ParseVector(*LocationArray, OutSpec.Transform.Location);
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* RotationArray = nullptr;
+        if ((*TransformObject)->TryGetArrayField(TEXT("rotation"), RotationArray))
+        {
+            OutSpec.Transform.bHasRotation = ParseRotator(*RotationArray, OutSpec.Transform.Rotation);
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* ScaleArray = nullptr;
+        if ((*TransformObject)->TryGetArrayField(TEXT("scale"), ScaleArray))
+        {
+            OutSpec.Transform.bHasScale = ParseVector(*ScaleArray, OutSpec.Transform.Scale);
+        }
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* PropertiesArray = nullptr;
+    if (Object->TryGetArrayField(TEXT("properties"), PropertiesArray))
+    {
+        ParsePropertyArray(PropertiesArray, OutSpec.Properties);
+    }
+
+    return true;
+}
+
+bool FAutomationProtocolJson::ParsePropertyArray(const TArray<TSharedPtr<FJsonValue>>* Array, TArray<FAutomationPropertyValue>& OutProperties)
+{
+    if (!Array)
+    {
+        return false;
+    }
+
+    for (const TSharedPtr<FJsonValue>& Value : *Array)
+    {
+        const TSharedPtr<FJsonObject> Object = Value->AsObject();
+        if (!Object.IsValid())
+        {
+            continue;
+        }
+
+        FAutomationPropertyValue Property;
+        Object->TryGetStringField(TEXT("name"), Property.Name);
+        Object->TryGetStringField(TEXT("type"), Property.Type);
+        const TSharedPtr<FJsonValue>* FieldValue = Object->Values.Find(TEXT("value"));
+        Property.Value = FieldValue ? *FieldValue : nullptr;
+        OutProperties.Add(Property);
+    }
+    return true;
+}
+
+bool FAutomationProtocolJson::ParseVector(const TArray<TSharedPtr<FJsonValue>>& Array, FVector& OutVector)
+{
+    if (Array.Num() != 3)
+    {
+        return false;
+    }
+    OutVector = FVector(Array[0]->AsNumber(), Array[1]->AsNumber(), Array[2]->AsNumber());
+    return true;
+}
+
+bool FAutomationProtocolJson::ParseRotator(const TArray<TSharedPtr<FJsonValue>>& Array, FRotator& OutRotator)
+{
+    if (Array.Num() != 3)
+    {
+        return false;
+    }
+    OutRotator = FRotator(Array[0]->AsNumber(), Array[1]->AsNumber(), Array[2]->AsNumber());
+    return true;
+}

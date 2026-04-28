@@ -1,0 +1,35 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_modify_bp_defaults_001",
+  "task_type": "modify_blueprint_defaults",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "execution": {
+    "save_after_success": true,
+    "compile_after_create": true
+  },
+  "payload": {
+    "target_asset": {
+      "asset_path": "/Game/Blueprints/AutoGen/BP_AutoActor.BP_AutoActor"
+    },
+    "class_defaults": [
+      {
+        "name": "MaxHealth",
+        "type": "int",
+        "value": 150
+      },
+      {
+        "name": "MoveSpeed",
+        "type": "float",
+        "value": 420.0
+      }
+    ],
+    "post_actions": [
+      {
+        "action": "compile_blueprint"
+      },
+      {
+        "action": "save_asset"
+      }
+    ]
+  }
+}
