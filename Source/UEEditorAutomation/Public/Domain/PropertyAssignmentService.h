@@ -17,6 +17,9 @@ private:
     bool JsonValueToImportTextForProperty(const TSharedPtr<FJsonValue>& Value, FProperty* Property, FString& OutImportText, FString& OutError) const;
     bool JsonObjectToStructImportText(const TSharedPtr<class FJsonObject>& Object, FString& OutImportText, FString& OutError) const;
     bool JsonArrayToArrayImportText(const TArray<TSharedPtr<FJsonValue>>& Array, class FArrayProperty* Property, FString& OutImportText, FString& OutError) const;
+    bool JsonArrayToSetImportText(const TArray<TSharedPtr<FJsonValue>>& Array, class FSetProperty* Property, FString& OutImportText, FString& OutError) const;
+    bool JsonObjectToMapImportText(const TSharedPtr<class FJsonObject>& Object, class FMapProperty* Property, FString& OutImportText, FString& OutError) const;
+    bool JsonMapArrayToMapImportText(const TArray<TSharedPtr<FJsonValue>>& Array, class FMapProperty* Property, FString& OutImportText, FString& OutError) const;
     FString JsonValueToImportText(const FAutomationPropertyValue& PropertyValue) const;
     FString JsonValueToString(const FAutomationPropertyValue& PropertyValue) const;
     FString NormalizeObjectPath(const FString& ObjectPath) const;

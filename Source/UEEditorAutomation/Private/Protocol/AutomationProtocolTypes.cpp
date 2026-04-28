@@ -91,6 +91,19 @@ bool FAutomationProtocolJson::ParseRequest(const FString& JsonText, FAutomationT
         ParseAssetSpec(*TargetAssetObject, OutRequest.TargetAsset);
     }
 
+    const TArray<TSharedPtr<FJsonValue>>* TargetAssetsArray = nullptr;
+    if ((*PayloadObject)->TryGetArrayField(TEXT("target_assets"), TargetAssetsArray))
+    {
+        for (const TSharedPtr<FJsonValue>& Value : *TargetAssetsArray)
+        {
+            FAutomationAssetSpec Asset;
+            if (ParseAssetSpec(Value->AsObject(), Asset))
+            {
+                OutRequest.TargetAssets.Add(Asset);
+            }
+        }
+    }
+
     const TSharedPtr<FJsonObject>* AssemblyObject = nullptr;
     if ((*PayloadObject)->TryGetObjectField(TEXT("assembly"), AssemblyObject) && AssemblyObject && AssemblyObject->IsValid())
     {
@@ -116,7 +129,8 @@ bool FAutomationProtocolJson::ParseRequest(const FString& JsonText, FAutomationT
 
     const TArray<TSharedPtr<FJsonValue>>* ClassDefaultsArray = nullptr;
     if ((*PayloadObject)->TryGetArrayField(TEXT("class_default_overrides"), ClassDefaultsArray)
-        || (*PayloadObject)->TryGetArrayField(TEXT("class_defaults"), ClassDefaultsArray))
+        || (*PayloadObject)->TryGetArrayField(TEXT("class_defaults"), ClassDefaultsArray)
+        || (*PayloadObject)->TryGetArrayField(TEXT("properties"), ClassDefaultsArray))
     {
         ParsePropertyArray(ClassDefaultsArray, OutRequest.ClassDefaults);
     }
@@ -232,6 +246,26 @@ bool FAutomationProtocolJson::ParseRequest(const FString& JsonText, FAutomationT
                 OutRequest.PostActions.Add(Action);
             }
         }
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* RulesArray = nullptr;
+    if ((*PayloadObject)->TryGetArrayField(TEXT("rules"), RulesArray))
+    {
+        for (const TSharedPtr<FJsonValue>& Value : *RulesArray)
+        {
+            FString Rule;
+            if (Value.IsValid() && Value->TryGetString(Rule) && !Rule.IsEmpty())
+            {
+                OutRequest.Rules.Add(Rule);
+            }
+        }
+    }
+
+    const TSharedPtr<FJsonObject>* ReportObject = nullptr;
+    if ((*PayloadObject)->TryGetObjectField(TEXT("report"), ReportObject) && ReportObject && ReportObject->IsValid())
+    {
+        (*ReportObject)->TryGetStringField(TEXT("path"), OutRequest.ReportPath);
+        (*ReportObject)->TryGetStringField(TEXT("format"), OutRequest.ReportFormat);
     }
 
     return true;

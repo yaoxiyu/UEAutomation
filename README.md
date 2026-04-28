@@ -104,6 +104,23 @@ Template registry entries define a stable component tree and optional class defa
 
 The Phase 2 property expansion intentionally stays bounded: `array` is accepted only when the target UE property is an array, and `struct` is accepted only when the target UE property is a struct and the JSON value is an object with scalar fields.
 
+## Phase 3 Extension Scope
+
+The first Phase 3 slice adds platform-extension MVPs:
+
+- `create_data_asset`
+- `modify_asset_properties`
+- `check_asset_rules`
+- `generate_audit_report`
+- explicit `Window -> UE Automation` debug panel menu entry
+- controlled `set` and `map` property import paths
+
+Phase 3 validation notes live in:
+
+```text
+Docs/Phase3_Extension_Checklist.md
+```
+
 ## Integration
 
 Copy `Plugins/UEEditorAutomation` into a UE project and regenerate project files. The module is editor-only and loads at `PostEngineInit`.

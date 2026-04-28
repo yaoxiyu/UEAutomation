@@ -104,6 +104,7 @@ struct FAutomationTaskRequest
     FAutomationExecutionOptions Execution;
     FAutomationAssetSpec Asset;
     FAutomationAssetSpec TargetAsset;
+    TArray<FAutomationAssetSpec> TargetAssets;
     FAutomationTemplateRef Template;
     FAutomationTemplateRef SharedTemplate;
     FAutomationComponentSpec RootComponent;
@@ -112,7 +113,10 @@ struct FAutomationTaskRequest
     TArray<FAutomationPropertyValue> ClassDefaults;
     TArray<FAutomationBatchBlueprintItem> BatchItems;
     TArray<FAutomationOperation> Operations;
+    TArray<FString> Rules;
     TArray<FString> PostActions;
+    FString ReportPath;
+    FString ReportFormat;
     FString SourcePath;
 };
 

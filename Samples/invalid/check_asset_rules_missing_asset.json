@@ -1,0 +1,14 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_check_asset_rules_missing_asset_001",
+  "task_type": "check_asset_rules",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "payload": {
+    "target_asset": {
+      "asset_path": "/Game/Blueprints/AutoGen/BP_MissingAsset_001.BP_MissingAsset_001"
+    },
+    "rules": [
+      "asset_exists"
+    ]
+  }
+}

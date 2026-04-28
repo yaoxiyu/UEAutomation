@@ -1,0 +1,17 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_create_data_asset_disallowed_class_001",
+  "task_type": "create_data_asset",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "execution": {
+    "save_after_success": true
+  },
+  "payload": {
+    "asset": {
+      "asset_type": "data_asset",
+      "asset_name": "DA_Disallowed_001",
+      "package_path": "/Game/Data/AutoGen",
+      "parent_class": "/Script/Engine.Actor"
+    }
+  }
+}

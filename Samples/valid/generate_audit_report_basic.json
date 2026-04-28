@@ -1,0 +1,12 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_generate_audit_report_basic_001",
+  "task_type": "generate_audit_report",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "payload": {
+    "report": {
+      "path": "Saved/UEAutomationReports/phase3_audit_basic.json",
+      "format": "json"
+    }
+  }
+}

@@ -3,16 +3,22 @@
     "create_blueprint",
     "create_blueprint_from_template",
     "batch_create_blueprints",
+    "create_data_asset",
+    "modify_asset_properties",
+    "check_asset_rules",
+    "generate_audit_report",
     "modify_blueprint_components",
     "modify_blueprint_defaults"
   ],
   "allowed_asset_roots": [
     "/Game/Blueprints/AutoGen",
+    "/Game/Data/AutoGen",
     "/Game/UI/AutoGen",
     "/Game/Test/AutoGen"
   ],
   "allowed_parent_classes": [
-    "/Script/Engine.Actor"
+    "/Script/Engine.Actor",
+    "/Script/Engine.DataAsset"
   ],
   "allowed_component_classes": [
     "/Script/Engine.SceneComponent",

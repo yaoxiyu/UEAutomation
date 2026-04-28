@@ -1,8 +1,11 @@
 #include "Application/BlueprintTaskExecutors.h"
+#include "Application/AssetTaskExecutors.h"
 #include "Application/EditorAutomationApplicationService.h"
 #include "Adapter/UEBlueprintEditorAdapter.h"
 #include "Core/AutomationLog.h"
 #include "Framework/Docking/TabManager.h"
+#include "Framework/MultiBox/MultiBoxBuilder.h"
+#include "LevelEditor.h"
 #include "Modules/ModuleManager.h"
 #include "UI/AutomationDebugPanel.h"
 #include "Widgets/Docking/SDockTab.h"
@@ -23,6 +26,7 @@ public:
 
         TSharedRef<FUEBlueprintEditorAdapter> BlueprintAdapter = MakeShared<FUEBlueprintEditorAdapter>();
         TSharedRef<FBlueprintAutomationService> BlueprintService = MakeShared<FBlueprintAutomationService>(BlueprintAdapter);
+        TSharedRef<FAssetAutomationService> AssetService = MakeShared<FAssetAutomationService>(BlueprintAdapter);
 
         ApplicationService = MakeShared<FEditorAutomationApplicationService>();
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateBlueprintTaskExecutor>(BlueprintService));
@@ -30,6 +34,10 @@ public:
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FBatchCreateBlueprintsTaskExecutor>(BlueprintService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FModifyBlueprintComponentsTaskExecutor>(BlueprintService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FModifyBlueprintDefaultsTaskExecutor>(BlueprintService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateDataAssetTaskExecutor>(AssetService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FModifyAssetPropertiesTaskExecutor>(AssetService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCheckAssetRulesTaskExecutor>(AssetService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FGenerateAuditReportTaskExecutor>(AssetService));
         ApplicationService->Initialize();
 
 #if ENGINE_MAJOR_VERSION >= 5
@@ -69,6 +77,18 @@ private:
             DebugPanelTabName,
             FOnSpawnTab::CreateRaw(this, &FUEEditorAutomationModule::SpawnDebugPanelTab))
             .SetDisplayName(FText::FromString(TEXT("UE Automation")));
+
+        if (FModuleManager::Get().IsModuleLoaded(TEXT("LevelEditor")))
+        {
+            FLevelEditorModule& LevelEditorModule = FModuleManager::LoadModuleChecked<FLevelEditorModule>(TEXT("LevelEditor"));
+            MenuExtender = MakeShared<FExtender>();
+            MenuExtender->AddMenuExtension(
+                TEXT("WindowLayout"),
+                EExtensionHook::After,
+                nullptr,
+                FMenuExtensionDelegate::CreateRaw(this, &FUEEditorAutomationModule::AddDebugPanelMenuEntry));
+            LevelEditorModule.GetMenuExtensibilityManager()->AddExtender(MenuExtender);
+        }
     }
 
     void UnregisterDebugPanel()
@@ -85,6 +105,20 @@ private:
             ];
     }
 
+    void AddDebugPanelMenuEntry(FMenuBuilder& MenuBuilder)
+    {
+        MenuBuilder.AddMenuEntry(
+            FText::FromString(TEXT("UE Automation")),
+            FText::FromString(TEXT("Open UE Editor Automation debug panel.")),
+            FSlateIcon(),
+            FUIAction(FExecuteAction::CreateRaw(this, &FUEEditorAutomationModule::OpenDebugPanel)));
+    }
+
+    void OpenDebugPanel()
+    {
+        FGlobalTabmanager::Get()->InvokeTab(DebugPanelTabName);
+    }
+
     bool HandleTicker(float DeltaTime)
     {
         if (ApplicationService.IsValid())
@@ -95,6 +129,7 @@ private:
     }
 
     TSharedPtr<FEditorAutomationApplicationService> ApplicationService;
+    TSharedPtr<FExtender> MenuExtender;
     FDelegateHandle TickHandle;
     const FName DebugPanelTabName = TEXT("UEEditorAutomationDebugPanel");
 };

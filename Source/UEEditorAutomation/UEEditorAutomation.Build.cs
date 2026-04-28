@@ -23,6 +23,7 @@ public class UEEditorAutomation : ModuleRules
             "EditorStyle",
             "InputCore",
             "KismetCompiler",
+            "LevelEditor",
             "Projects",
             "Slate",
             "SlateCore",

@@ -1,0 +1,21 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_modify_asset_properties_missing_property_001",
+  "task_type": "modify_asset_properties",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "execution": {
+    "save_after_success": true
+  },
+  "payload": {
+    "target_asset": {
+      "asset_path": "/Game/Data/AutoGen/DA_AutomationBasic_001.DA_AutomationBasic_001"
+    },
+    "properties": [
+      {
+        "name": "InitialLifeSpan",
+        "type": "float",
+        "value": 1.0
+      }
+    ]
+  }
+}

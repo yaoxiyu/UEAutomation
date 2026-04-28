@@ -176,6 +176,30 @@ bool FPropertyAssignmentService::ImportTextValue(UObject* Target, FProperty* Pro
             return false;
         }
     }
+    else if (Type == TEXT("set"))
+    {
+        if (!CastField<FSetProperty>(Property))
+        {
+            OutError = FString::Printf(TEXT("Property '%s' is not a set property."), *PropertyValue.Name);
+            return false;
+        }
+        if (!JsonValueToImportTextForProperty(PropertyValue.Value, Property, ImportText, OutError))
+        {
+            return false;
+        }
+    }
+    else if (Type == TEXT("map"))
+    {
+        if (!CastField<FMapProperty>(Property))
+        {
+            OutError = FString::Printf(TEXT("Property '%s' is not a map property."), *PropertyValue.Name);
+            return false;
+        }
+        if (!JsonValueToImportTextForProperty(PropertyValue.Value, Property, ImportText, OutError))
+        {
+            return false;
+        }
+    }
     else
     {
         ImportText = JsonValueToImportText(PropertyValue);
@@ -215,6 +239,31 @@ bool FPropertyAssignmentService::JsonValueToImportTextForProperty(const TSharedP
         }
         const TArray<TSharedPtr<FJsonValue>>& Array = Value->AsArray();
         return JsonArrayToArrayImportText(Array, ArrayProperty, OutImportText, OutError);
+    }
+
+    if (FSetProperty* SetProperty = CastField<FSetProperty>(Property))
+    {
+        if (Value->Type != EJson::Array)
+        {
+            OutError = FString::Printf(TEXT("Set property '%s' requires an array value."), *Property->GetName());
+            return false;
+        }
+        const TArray<TSharedPtr<FJsonValue>>& Array = Value->AsArray();
+        return JsonArrayToSetImportText(Array, SetProperty, OutImportText, OutError);
+    }
+
+    if (FMapProperty* MapProperty = CastField<FMapProperty>(Property))
+    {
+        if (Value->Type == EJson::Object)
+        {
+            return JsonObjectToMapImportText(Value->AsObject(), MapProperty, OutImportText, OutError);
+        }
+        if (Value->Type == EJson::Array)
+        {
+            return JsonMapArrayToMapImportText(Value->AsArray(), MapProperty, OutImportText, OutError);
+        }
+        OutError = FString::Printf(TEXT("Map property '%s' requires an object or key/value array."), *Property->GetName());
+        return false;
     }
 
     if (CastField<FStructProperty>(Property))
@@ -325,6 +374,100 @@ bool FPropertyAssignmentService::JsonArrayToArrayImportText(const TArray<TShared
     }
 
     OutImportText = FString::Printf(TEXT("(%s)"), *FString::Join(Elements, TEXT(",")));
+    return true;
+}
+
+bool FPropertyAssignmentService::JsonArrayToSetImportText(const TArray<TSharedPtr<FJsonValue>>& Array, FSetProperty* Property, FString& OutImportText, FString& OutError) const
+{
+    if (!Property || !Property->ElementProp)
+    {
+        OutError = TEXT("Set property has no element property.");
+        return false;
+    }
+
+    TArray<FString> Elements;
+    for (int32 Index = 0; Index < Array.Num(); ++Index)
+    {
+        FString ElementText;
+        if (!JsonValueToImportTextForProperty(Array[Index], Property->ElementProp, ElementText, OutError))
+        {
+            OutError = FString::Printf(TEXT("Set element %d is invalid: %s"), Index, *OutError);
+            return false;
+        }
+        Elements.Add(ElementText);
+    }
+
+    OutImportText = FString::Printf(TEXT("(%s)"), *FString::Join(Elements, TEXT(",")));
+    return true;
+}
+
+bool FPropertyAssignmentService::JsonObjectToMapImportText(const TSharedPtr<FJsonObject>& Object, FMapProperty* Property, FString& OutImportText, FString& OutError) const
+{
+    if (!Object.IsValid())
+    {
+        OutError = TEXT("Map value must be a JSON object.");
+        return false;
+    }
+
+    TArray<FString> Pairs;
+    for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Object->Values)
+    {
+        const TSharedPtr<FJsonValue> KeyValue = MakeShared<FJsonValueString>(Pair.Key);
+        FString KeyText;
+        FString ValueText;
+        if (!JsonValueToImportTextForProperty(KeyValue, Property->KeyProp, KeyText, OutError))
+        {
+            OutError = FString::Printf(TEXT("Map key '%s' is invalid: %s"), *Pair.Key, *OutError);
+            return false;
+        }
+        if (!JsonValueToImportTextForProperty(Pair.Value, Property->ValueProp, ValueText, OutError))
+        {
+            OutError = FString::Printf(TEXT("Map value for key '%s' is invalid: %s"), *Pair.Key, *OutError);
+            return false;
+        }
+        Pairs.Add(FString::Printf(TEXT("(Key=%s,Value=%s)"), *KeyText, *ValueText));
+    }
+
+    OutImportText = FString::Printf(TEXT("(%s)"), *FString::Join(Pairs, TEXT(",")));
+    return true;
+}
+
+bool FPropertyAssignmentService::JsonMapArrayToMapImportText(const TArray<TSharedPtr<FJsonValue>>& Array, FMapProperty* Property, FString& OutImportText, FString& OutError) const
+{
+    TArray<FString> Pairs;
+    for (int32 Index = 0; Index < Array.Num(); ++Index)
+    {
+        const TSharedPtr<FJsonObject> PairObject = Array[Index]->AsObject();
+        if (!PairObject.IsValid())
+        {
+            OutError = FString::Printf(TEXT("Map pair %d must be an object."), Index);
+            return false;
+        }
+
+        const TSharedPtr<FJsonValue>* KeyValue = PairObject->Values.Find(TEXT("key"));
+        const TSharedPtr<FJsonValue>* ValueValue = PairObject->Values.Find(TEXT("value"));
+        if (!KeyValue || !ValueValue)
+        {
+            OutError = FString::Printf(TEXT("Map pair %d requires key and value fields."), Index);
+            return false;
+        }
+
+        FString KeyText;
+        FString ValueText;
+        if (!JsonValueToImportTextForProperty(*KeyValue, Property->KeyProp, KeyText, OutError))
+        {
+            OutError = FString::Printf(TEXT("Map pair %d key is invalid: %s"), Index, *OutError);
+            return false;
+        }
+        if (!JsonValueToImportTextForProperty(*ValueValue, Property->ValueProp, ValueText, OutError))
+        {
+            OutError = FString::Printf(TEXT("Map pair %d value is invalid: %s"), Index, *OutError);
+            return false;
+        }
+        Pairs.Add(FString::Printf(TEXT("(Key=%s,Value=%s)"), *KeyText, *ValueText));
+    }
+
+    OutImportText = FString::Printf(TEXT("(%s)"), *FString::Join(Pairs, TEXT(",")));
     return true;
 }
 
