@@ -18,6 +18,7 @@ private:
     UClass* LoadClassByPath(const FString& ClassPath, FAutomationTaskResult& OutResult, const FString& Field) const;
     bool AddComponent(UBlueprint* Blueprint, const FAutomationComponentSpec& Component, FAutomationTaskResult& OutResult, const FString& FieldPrefix);
     bool CompileSaveOpen(UBlueprint* Blueprint, const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult);
+    void AddTargetAssetOutput(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) const;
     bool CompileIfRequested(UBlueprint* Blueprint, bool bCompile, FAutomationTaskResult& OutResult);
     bool SaveIfRequested(UBlueprint* Blueprint, bool bSave, FAutomationTaskResult& OutResult);
 

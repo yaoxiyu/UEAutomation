@@ -139,7 +139,13 @@ bool FBlueprintAutomationService::ModifyBlueprintComponents(const FAutomationTas
         }
     }
 
-    return CompileSaveOpen(Blueprint, Request, OutResult);
+    if (!CompileSaveOpen(Blueprint, Request, OutResult))
+    {
+        return false;
+    }
+
+    AddTargetAssetOutput(Request, OutResult);
+    return true;
 }
 
 bool FBlueprintAutomationService::ModifyBlueprintDefaults(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
@@ -163,12 +169,24 @@ bool FBlueprintAutomationService::ModifyBlueprintDefaults(const FAutomationTaskR
         return false;
     }
 
-    return CompileSaveOpen(Blueprint, Request, OutResult);
+    if (!CompileSaveOpen(Blueprint, Request, OutResult))
+    {
+        return false;
+    }
+
+    AddTargetAssetOutput(Request, OutResult);
+    return true;
 }
 
 UClass* FBlueprintAutomationService::LoadClassByPath(const FString& ClassPath, FAutomationTaskResult& OutResult, const FString& Field) const
 {
     const FAutomationWhitelist Whitelist = FAutomationWhitelistProvider::Load();
+    if (!Whitelist.bLoaded)
+    {
+        OutResult.AddError(TEXT("WhitelistLoadFailed"), Whitelist.LoadError, TEXT("security.whitelist"));
+        return nullptr;
+    }
+
     if (Field.Contains(TEXT("parent_class")) && Whitelist.AllowedParentClasses.Num() > 0 && !Whitelist.AllowedParentClasses.Contains(ClassPath))
     {
         OutResult.AddError(TEXT("InvalidParentClass"), FString::Printf(TEXT("Parent class '%s' is not allowed."), *ClassPath), Field);
@@ -229,6 +247,33 @@ bool FBlueprintAutomationService::CompileSaveOpen(UBlueprint* Blueprint, const F
         return false;
     }
     return SaveIfRequested(Blueprint, Request.PostActions.Contains(TEXT("save_asset")) || Request.Execution.bSaveAfterSuccess, OutResult);
+}
+
+void FBlueprintAutomationService::AddTargetAssetOutput(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) const
+{
+    if (Request.TargetAsset.AssetPath.IsEmpty())
+    {
+        return;
+    }
+
+    FAutomationAssetOutput Output;
+    Output.AssetPath = Request.TargetAsset.AssetPath;
+    Output.AssetType = TEXT("blueprint");
+
+    int32 DotIndex = INDEX_NONE;
+    if (Request.TargetAsset.AssetPath.FindLastChar(TEXT('.'), DotIndex))
+    {
+        Output.AssetName = Request.TargetAsset.AssetPath.Mid(DotIndex + 1);
+    }
+    else
+    {
+        int32 SlashIndex = INDEX_NONE;
+        Output.AssetName = Request.TargetAsset.AssetPath.FindLastChar(TEXT('/'), SlashIndex)
+            ? Request.TargetAsset.AssetPath.Mid(SlashIndex + 1)
+            : Request.TargetAsset.AssetPath;
+    }
+
+    OutResult.AssetOutputs.Add(Output);
 }
 
 bool FBlueprintAutomationService::CompileIfRequested(UBlueprint* Blueprint, bool bCompile, FAutomationTaskResult& OutResult)

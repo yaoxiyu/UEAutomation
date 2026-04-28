@@ -16,6 +16,7 @@ FAutomationWhitelist FAutomationWhitelistProvider::Load()
     const FString WhitelistPath = ResolveWhitelistPath();
     if (!FFileHelper::LoadFileToString(JsonText, *WhitelistPath))
     {
+        Whitelist.LoadError = FString::Printf(TEXT("Whitelist file '%s' could not be loaded."), *WhitelistPath);
         return Whitelist;
     }
 
@@ -23,9 +24,11 @@ FAutomationWhitelist FAutomationWhitelistProvider::Load()
     const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonText);
     if (!FJsonSerializer::Deserialize(Reader, JsonObject) || !JsonObject.IsValid())
     {
+        Whitelist.LoadError = FString::Printf(TEXT("Whitelist file '%s' is not valid JSON."), *WhitelistPath);
         return Whitelist;
     }
 
+    Whitelist.bLoaded = true;
     ReadStringArray(JsonObject, TEXT("allowed_task_types"), Whitelist.AllowedTaskTypes);
     ReadStringArray(JsonObject, TEXT("allowed_asset_roots"), Whitelist.AllowedAssetRoots);
     ReadStringArray(JsonObject, TEXT("allowed_parent_classes"), Whitelist.AllowedParentClasses);

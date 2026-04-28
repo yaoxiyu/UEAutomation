@@ -24,6 +24,12 @@ bool FPropertyAssignmentService::AssignProperty(UObject* Target, const FAutomati
     }
 
     const FAutomationWhitelist Whitelist = FAutomationWhitelistProvider::Load();
+    if (!Whitelist.bLoaded)
+    {
+        OutResult.AddError(TEXT("WhitelistLoadFailed"), Whitelist.LoadError, TEXT("security.whitelist"));
+        return false;
+    }
+
     if (!Whitelist.AllowedPropertyNames.Contains(PropertyValue.Name))
     {
         OutResult.AddError(TEXT("PropertyAssignmentNotAllowed"), FString::Printf(TEXT("Property '%s' is not allowed."), *PropertyValue.Name), FieldPrefix + TEXT(".name"));

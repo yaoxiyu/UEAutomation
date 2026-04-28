@@ -21,6 +21,12 @@ bool FTaskValidator::ValidateCommon(const FAutomationTaskRequest& Request, FAuto
     }
 
     const FAutomationWhitelist Whitelist = FAutomationWhitelistProvider::Load();
+    if (!Whitelist.bLoaded)
+    {
+        OutResult.AddError(TEXT("WhitelistLoadFailed"), Whitelist.LoadError, TEXT("security.whitelist"));
+        return false;
+    }
+
     if (!Whitelist.AllowedTaskTypes.Contains(Request.TaskType))
     {
         OutResult.AddError(TEXT("InvalidTaskType"), FString::Printf(TEXT("Task type '%s' is not allowed."), *Request.TaskType), TEXT("task_type"));
@@ -46,6 +52,11 @@ bool FTaskValidator::ValidateCommon(const FAutomationTaskRequest& Request, FAuto
 bool FTaskValidator::IsAllowedAssetRoot(const FString& PackagePath) const
 {
     const FAutomationWhitelist Whitelist = FAutomationWhitelistProvider::Load();
+    if (!Whitelist.bLoaded)
+    {
+        return false;
+    }
+
     for (const FString& Root : Whitelist.AllowedAssetRoots)
     {
         if (PackagePath.StartsWith(Root))

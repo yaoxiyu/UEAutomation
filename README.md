@@ -31,6 +31,17 @@ C:/UEAutomation/
 
 Drop a task JSON file into `tasks/inbox`. The plugin moves it to `working`, executes it on the editor ticker, writes `results/<task_id>.result.json`, then moves the task to `done` or `failed`.
 
+## Samples
+
+Sample tasks are split by expected outcome:
+
+```text
+Samples/valid/
+Samples/invalid/
+```
+
+Use the invalid samples to verify structured error output after changing whitelist policy or task parsing.
+
 ## Configuration
 
 Project settings are exposed by `UEditorAutomationSettings`:

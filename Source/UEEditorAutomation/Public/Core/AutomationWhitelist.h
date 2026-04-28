@@ -4,6 +4,8 @@
 
 struct FAutomationWhitelist
 {
+    bool bLoaded = false;
+    FString LoadError;
     TArray<FString> AllowedTaskTypes;
     TArray<FString> AllowedAssetRoots;
     TArray<FString> AllowedParentClasses;
