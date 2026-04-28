@@ -99,8 +99,13 @@ bool FBlueprintAutomationService::CreateBlueprint(const FAutomationTaskRequest& 
 
     if (Request.Execution.bOpenAfterSuccess && !BlueprintAdapter->OpenAsset(Blueprint, Error))
     {
+        OutResult.AddLog(TEXT("blueprint: open asset"));
         OutResult.AddError(TEXT("OpenAssetFailed"), Error);
         return false;
+    }
+    if (Request.Execution.bOpenAfterSuccess)
+    {
+        OutResult.AddLog(TEXT("blueprint: open asset"));
     }
 
     AddCreatedAssetOutput(Request, OutResult);
