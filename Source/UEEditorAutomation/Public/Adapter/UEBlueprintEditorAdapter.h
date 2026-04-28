@@ -9,6 +9,7 @@ public:
     virtual UBlueprint* LoadBlueprintAsset(const FString& AssetPath, FString& OutError) override;
     virtual bool DoesAssetExist(const FString& PackagePath, const FString& AssetName) const override;
     virtual bool AddComponentNode(UBlueprint* Blueprint, UClass* ComponentClass, const FString& ComponentName, const FString& AttachParentName, FString& OutError) override;
+    virtual bool RemoveComponentNode(UBlueprint* Blueprint, const FString& ComponentName, FString& OutError) override;
     virtual UObject* GetComponentTemplate(UBlueprint* Blueprint, const FString& ComponentName, FString& OutError) override;
     virtual bool ApplyComponentTransform(UObject* ComponentTemplate, const struct FAutomationTransformSpec& Transform, FString& OutError) override;
     virtual bool CompileBlueprint(UBlueprint* Blueprint, FString& OutError) override;

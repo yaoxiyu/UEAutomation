@@ -1,7 +1,12 @@
 #include "Domain/PropertyAssignmentService.h"
 
+#include "Components/PrimitiveComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Core/AutomationWhitelist.h"
 #include "Dom/JsonValue.h"
+#include "Engine/SkeletalMesh.h"
+#include "Engine/StaticMesh.h"
 #include "UObject/UnrealType.h"
 
 bool FPropertyAssignmentService::AssignProperties(UObject* Target, const TArray<FAutomationPropertyValue>& Properties, FAutomationTaskResult& OutResult, const FString& FieldPrefix) const
@@ -36,6 +41,18 @@ bool FPropertyAssignmentService::AssignProperty(UObject* Target, const FAutomati
         return false;
     }
 
+    bool bHandled = false;
+    if (!TryAssignSpecialProperty(Target, PropertyValue, OutResult, FieldPrefix, bHandled))
+    {
+        return false;
+    }
+    if (bHandled)
+    {
+        Target->Modify();
+        OutResult.Metrics.PropertyAssignCount++;
+        return true;
+    }
+
     FProperty* Property = Target->GetClass()->FindPropertyByName(FName(*PropertyValue.Name));
     if (!Property)
     {
@@ -52,6 +69,75 @@ bool FPropertyAssignmentService::AssignProperty(UObject* Target, const FAutomati
 
     Target->Modify();
     OutResult.Metrics.PropertyAssignCount++;
+    return true;
+}
+
+bool FPropertyAssignmentService::TryAssignSpecialProperty(UObject* Target, const FAutomationPropertyValue& PropertyValue, FAutomationTaskResult& OutResult, const FString& FieldPrefix, bool& bOutHandled) const
+{
+    bOutHandled = false;
+
+    if (PropertyValue.Name == TEXT("CollisionProfileName"))
+    {
+        UPrimitiveComponent* PrimitiveComponent = Cast<UPrimitiveComponent>(Target);
+        if (!PrimitiveComponent)
+        {
+            return true;
+        }
+
+        const FString ProfileName = JsonValueToString(PropertyValue);
+        if (ProfileName.IsEmpty())
+        {
+            OutResult.AddError(TEXT("InvalidPropertyValue"), TEXT("CollisionProfileName requires a non-empty string value."), FieldPrefix + TEXT(".value"));
+            return false;
+        }
+
+        PrimitiveComponent->SetCollisionProfileName(FName(*ProfileName));
+        bOutHandled = true;
+        return true;
+    }
+
+    if (PropertyValue.Name == TEXT("StaticMesh"))
+    {
+        UStaticMeshComponent* StaticMeshComponent = Cast<UStaticMeshComponent>(Target);
+        if (!StaticMeshComponent)
+        {
+            return true;
+        }
+
+        const FString MeshPath = NormalizeObjectPath(JsonValueToString(PropertyValue));
+        UStaticMesh* StaticMesh = LoadObject<UStaticMesh>(nullptr, *MeshPath);
+        if (!StaticMesh)
+        {
+            OutResult.AddError(TEXT("InvalidPropertyValue"), FString::Printf(TEXT("StaticMesh '%s' could not be loaded."), *MeshPath), FieldPrefix + TEXT(".value"));
+            return false;
+        }
+
+        StaticMeshComponent->SetStaticMesh(StaticMesh);
+        bOutHandled = true;
+        return true;
+    }
+
+    if (PropertyValue.Name == TEXT("SkeletalMesh"))
+    {
+        USkeletalMeshComponent* SkeletalMeshComponent = Cast<USkeletalMeshComponent>(Target);
+        if (!SkeletalMeshComponent)
+        {
+            return true;
+        }
+
+        const FString MeshPath = NormalizeObjectPath(JsonValueToString(PropertyValue));
+        USkeletalMesh* SkeletalMesh = LoadObject<USkeletalMesh>(nullptr, *MeshPath);
+        if (!SkeletalMesh)
+        {
+            OutResult.AddError(TEXT("InvalidPropertyValue"), FString::Printf(TEXT("SkeletalMesh '%s' could not be loaded."), *MeshPath), FieldPrefix + TEXT(".value"));
+            return false;
+        }
+
+        SkeletalMeshComponent->SetSkeletalMesh(SkeletalMesh);
+        bOutHandled = true;
+        return true;
+    }
+
     return true;
 }
 
@@ -166,4 +252,20 @@ FString FPropertyAssignmentService::JsonValueToImportText(const FAutomationPrope
     }
 
     return Value->AsString();
+}
+
+FString FPropertyAssignmentService::JsonValueToString(const FAutomationPropertyValue& PropertyValue) const
+{
+    return PropertyValue.Value.IsValid() ? PropertyValue.Value->AsString() : FString();
+}
+
+FString FPropertyAssignmentService::NormalizeObjectPath(const FString& ObjectPath) const
+{
+    int32 FirstQuote = INDEX_NONE;
+    int32 LastQuote = INDEX_NONE;
+    if (ObjectPath.FindChar(TEXT('\''), FirstQuote) && ObjectPath.FindLastChar(TEXT('\''), LastQuote) && LastQuote > FirstQuote)
+    {
+        return ObjectPath.Mid(FirstQuote + 1, LastQuote - FirstQuote - 1);
+    }
+    return ObjectPath;
 }

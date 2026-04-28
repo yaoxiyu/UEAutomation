@@ -238,23 +238,32 @@ bool FBlueprintAutomationService::AddComponent(UBlueprint* Blueprint, const FAut
         OutResult.AddError(Code, Error, FieldPrefix);
         return false;
     }
-    OutResult.Metrics.ComponentCreateCount++;
 
     UObject* Template = BlueprintAdapter->GetComponentTemplate(Blueprint, Component.ComponentName, Error);
     if (!Template)
     {
         OutResult.AddError(TEXT("ComponentTemplateNotFound"), Error, FieldPrefix + TEXT(".component_name"));
+        BlueprintAdapter->RemoveComponentNode(Blueprint, Component.ComponentName, Error);
         return false;
     }
 
     if (!BlueprintAdapter->ApplyComponentTransform(Template, Component.Transform, Error))
     {
         OutResult.AddError(TEXT("InvalidPropertyValue"), Error, FieldPrefix + TEXT(".transform"));
+        BlueprintAdapter->RemoveComponentNode(Blueprint, Component.ComponentName, Error);
         return false;
     }
 
     OutResult.AddLog(FString::Printf(TEXT("component: assign %d properties to %s"), Component.Properties.Num(), *Component.ComponentName));
-    return PropertyAssignmentService.AssignProperties(Template, Component.Properties, OutResult, FieldPrefix + TEXT(".properties"));
+    if (!PropertyAssignmentService.AssignProperties(Template, Component.Properties, OutResult, FieldPrefix + TEXT(".properties")))
+    {
+        OutResult.AddLog(FString::Printf(TEXT("component: rollback SCS node %s after property assignment failure"), *Component.ComponentName));
+        BlueprintAdapter->RemoveComponentNode(Blueprint, Component.ComponentName, Error);
+        return false;
+    }
+
+    OutResult.Metrics.ComponentCreateCount++;
+    return true;
 }
 
 bool FBlueprintAutomationService::CompileSaveOpen(UBlueprint* Blueprint, const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)

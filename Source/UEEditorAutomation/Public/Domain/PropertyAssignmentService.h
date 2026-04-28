@@ -12,6 +12,9 @@ public:
     bool AssignProperty(UObject* Target, const FAutomationPropertyValue& PropertyValue, FAutomationTaskResult& OutResult, const FString& FieldPrefix) const;
 
 private:
+    bool TryAssignSpecialProperty(UObject* Target, const FAutomationPropertyValue& PropertyValue, FAutomationTaskResult& OutResult, const FString& FieldPrefix, bool& bOutHandled) const;
     bool ImportTextValue(UObject* Target, FProperty* Property, const FAutomationPropertyValue& PropertyValue, FString& OutError) const;
     FString JsonValueToImportText(const FAutomationPropertyValue& PropertyValue) const;
+    FString JsonValueToString(const FAutomationPropertyValue& PropertyValue) const;
+    FString NormalizeObjectPath(const FString& ObjectPath) const;
 };

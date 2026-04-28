@@ -122,6 +122,26 @@ bool FUEBlueprintEditorAdapter::AddComponentNode(UBlueprint* Blueprint, UClass* 
     return true;
 }
 
+bool FUEBlueprintEditorAdapter::RemoveComponentNode(UBlueprint* Blueprint, const FString& ComponentName, FString& OutError)
+{
+    if (!Blueprint || !Blueprint->SimpleConstructionScript)
+    {
+        OutError = TEXT("Blueprint or SimpleConstructionScript is invalid.");
+        return false;
+    }
+
+    USCS_Node* Node = FindSCSNode(Blueprint, ComponentName);
+    if (!Node)
+    {
+        OutError = FString::Printf(TEXT("Component '%s' not found."), *ComponentName);
+        return false;
+    }
+
+    Blueprint->SimpleConstructionScript->RemoveNode(Node);
+    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+    return true;
+}
+
 UObject* FUEBlueprintEditorAdapter::GetComponentTemplate(UBlueprint* Blueprint, const FString& ComponentName, FString& OutError)
 {
     USCS_Node* Node = FindSCSNode(Blueprint, ComponentName);
