@@ -1,0 +1,20 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_import_sound_wave_template_001",
+  "task_type": "import_sound_wave",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "execution": {
+    "idempotency_key": "import_sound_wave_template_001",
+    "skip_if_exists": false,
+    "overwrite_if_exists": false,
+    "save_after_success": true
+  },
+  "payload": {
+    "source_path": "D:/ReplaceWithSound.wav",
+    "asset": {
+      "asset_type": "sound_wave",
+      "asset_name": "S_AutomationBasic_001",
+      "package_path": "/Game/Audio/AutoGen"
+    }
+  }
+}

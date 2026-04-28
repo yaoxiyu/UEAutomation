@@ -1,0 +1,26 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_create_blend_space_template_001",
+  "task_type": "create_blend_space",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "execution": {
+    "idempotency_key": "create_blend_space_template_001",
+    "skip_if_exists": false,
+    "overwrite_if_exists": false,
+    "save_after_success": true
+  },
+  "payload": {
+    "asset": {
+      "asset_type": "blend_space",
+      "asset_name": "BS_AutomationBasic_001",
+      "package_path": "/Game/Animations/AutoGen"
+    },
+    "parameters": [
+      {
+        "name": "target_skeleton",
+        "type": "object_path",
+        "value": "/Game/Characters/ReplaceWithSkeleton.ReplaceWithSkeleton"
+      }
+    ]
+  }
+}

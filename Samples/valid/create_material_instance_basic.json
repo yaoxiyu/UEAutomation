@@ -1,0 +1,27 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_create_material_instance_basic_001",
+  "task_type": "create_material_instance",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "execution": {
+    "idempotency_key": "create_material_instance_basic_001",
+    "skip_if_exists": false,
+    "overwrite_if_exists": false,
+    "save_after_success": true
+  },
+  "payload": {
+    "asset": {
+      "asset_type": "material_instance",
+      "asset_name": "MI_AutomationBasic_001",
+      "package_path": "/Game/Materials/AutoGen",
+      "parent_class": "/Engine/EngineMaterials/DefaultMaterial.DefaultMaterial"
+    },
+    "parameters": [
+      {
+        "name": "Tint",
+        "type": "linear_color",
+        "value": [0.2, 0.7, 1.0, 1.0]
+      }
+    ]
+  }
+}

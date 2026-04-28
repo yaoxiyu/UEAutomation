@@ -18,6 +18,12 @@ public:
     UPROPERTY(Config, EditAnywhere, Category="Daemon", meta=(ClampMin="0.1"))
     float PollIntervalSeconds;
 
+    UPROPERTY(Config, EditAnywhere, Category="UE Automation Socket")
+    bool bEnableUEAutomationSocketServer;
+
+    UPROPERTY(Config, EditAnywhere, Category="UE Automation Socket", meta=(ClampMin="1024", ClampMax="65535"))
+    int32 UEAutomationSocketPort;
+
     UPROPERTY(Config, EditAnywhere, Category="Execution", meta=(ClampMin="1", ClampMax="1"))
     int32 MaxConcurrentTasks;
 

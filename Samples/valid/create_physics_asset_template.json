@@ -1,0 +1,26 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_create_physics_asset_template_001",
+  "task_type": "create_physics_asset",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "execution": {
+    "idempotency_key": "create_physics_asset_template_001",
+    "skip_if_exists": false,
+    "overwrite_if_exists": false,
+    "save_after_success": true
+  },
+  "payload": {
+    "asset": {
+      "asset_type": "physics_asset",
+      "asset_name": "PHYS_AutomationBasic_001",
+      "package_path": "/Game/Physics/AutoGen"
+    },
+    "parameters": [
+      {
+        "name": "target_skeletal_mesh",
+        "type": "object_path",
+        "value": "/Game/Characters/ReplaceWithSkeletalMesh.ReplaceWithSkeletalMesh"
+      }
+    ]
+  }
+}

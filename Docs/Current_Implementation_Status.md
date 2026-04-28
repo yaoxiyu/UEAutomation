@@ -169,7 +169,8 @@ Implemented Phase 2 property expansion:
 - `type: struct` is accepted only when the real UE property is `FStructProperty`.
 - Array elements currently support scalar values and nested struct values through UE import text.
 - Struct JSON fields currently support scalar values only.
-- `set`, `map`, arbitrary deep nesting, and arbitrary custom struct policies are not implemented.
+- Controlled `set` and `map` paths are implemented when the real UE property is `FSetProperty` or `FMapProperty`.
+- Arbitrary deep nesting and arbitrary custom struct policies are not implemented.
 
 Implemented debug panel MVP:
 
@@ -265,17 +266,34 @@ Source/UEEditorAutomation/UEEditorAutomation.Build.cs
 
 Near-term:
 
-- Validate the Phase 3 extension slice after manual compilation.
+- Add DataTable row import if production needs table content automation, not just asset creation.
+- Add Blueprint graph node automation if production needs EventGraph / ConstructionScript generation.
 - Add tests/samples for invalid template registry structure.
 - Improve batch result semantics if partial-success reporting is ever required.
 
-## Phase 3 In Progress Status
+## Phase 3 Status
 
-The first Phase 3 extension slice has been implemented locally and is awaiting manual compile/validation.
+The first Phase 3 extension slice is implemented and validated after manual user compilation and editor restart.
 
-Implemented task types in this slice:
+Implemented and validated task types in this slice:
 
 - `create_data_asset`
+- `create_material_instance`
+- `modify_material_instance`
+- `create_blueprint_class`
+- `create_widget_blueprint`
+- `create_data_table`
+- `create_curve_float`
+- `create_curve_vector`
+- `create_animation_blueprint`
+- `create_blend_space`
+- `create_level_sequence`
+- `create_physics_asset`
+- `create_material_function`
+- `create_gameplay_ability`
+- `create_gameplay_effect`
+- `import_texture`
+- `import_sound_wave`
 - `modify_asset_properties`
 - `check_asset_rules`
 - `generate_audit_report`
@@ -283,11 +301,47 @@ Implemented task types in this slice:
 Implemented platform extensions:
 
 - DataAsset creation as the first non-Blueprint asset type.
+- MaterialInstanceConstant creation and parameter modification.
+- Concrete asset creation through task-specific dynamic factories for Blueprint, Widget Blueprint, DataTable, Curve, Animation Blueprint, BlendSpace, LevelSequence, PhysicsAsset, MaterialFunction, and GAS Blueprint assets.
+- Texture and SoundWave import tasks from source files.
 - Generic UObject asset property modification through the existing whitelist and property assignment service.
 - Asset rule checking for existence and allowed-root checks.
 - JSON audit report generation from existing result files.
 - Explicit `Window -> UE Automation` debug panel menu entry.
 - Controlled `set` and `map` property import paths.
+- Optional local socket server for trusted localhost task execution.
+- CI helper scripts for file and socket task submission.
+
+Last validated Phase 3 cases:
+
+- `create_data_asset`
+- `create_material_instance`
+- `modify_material_instance`
+- `create_blueprint_class`
+- `create_widget_blueprint`
+- `create_data_table`
+- `create_curve_float`
+- `create_curve_vector`
+- `create_animation_blueprint`
+- `create_blend_space`
+- `create_level_sequence`
+- `create_physics_asset`
+- `create_material_function`
+- `create_gameplay_ability`
+- `create_gameplay_effect`
+- `import_texture`
+- `import_sound_wave`
+- `check_asset_rules`
+- `generate_audit_report`
+- trusted-localhost socket execution
+
+Important Phase 3 implementation notes:
+
+- `create_physics_asset` uses `FPhysicsAssetUtils::CreateFromSkeletalMesh` instead of `UPhysicsAssetFactory::CreatePhysicsAssetFromMesh`, because the factory path opens a modal body creation dialog and blocks automation.
+- `create_physics_asset` passes `bSetToMesh=false`, so validation creates the new PhysicsAsset without writing it back to the source SkeletalMesh.
+- `import_sound_wave` relies on the engine-registered AudioEditor sound factory. In this engine fork, `ImportAssetTasks` may populate `ImportedObjectPaths` without populating `Result`; the plugin falls back to loading the first imported object path.
+- `import_texture` uses an explicit `TextureFactory` and also supports the `ImportedObjectPaths` fallback.
+- The socket server is optional and controlled by `bEnableUEAutomationSocketServer`; it was validated on `127.0.0.1:18777`.
 
 Main Phase 3 verification doc:
 
@@ -299,6 +353,6 @@ Deferred unless real production cases require them:
 
 - Deep nested JSON-to-UE property conversion.
 - Custom project-specific struct policies.
-- Socket / HTTP transport.
-- More asset types beyond Blueprint.
+- HTTP transport.
+- DataTable row import.
 - Blueprint graph node automation.

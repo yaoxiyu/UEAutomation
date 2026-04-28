@@ -1,0 +1,19 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_create_curve_vector_basic_001",
+  "task_type": "create_curve_vector",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "execution": {
+    "idempotency_key": "create_curve_vector_basic_001",
+    "skip_if_exists": false,
+    "overwrite_if_exists": false,
+    "save_after_success": true
+  },
+  "payload": {
+    "asset": {
+      "asset_type": "curve_vector",
+      "asset_name": "CV_AutomationBasic_001",
+      "package_path": "/Game/Curves/AutoGen"
+    }
+  }
+}

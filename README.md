@@ -110,15 +110,45 @@ The first Phase 3 slice adds platform-extension MVPs:
 
 - `create_data_asset`
 - `modify_asset_properties`
+- `create_material_instance`
+- `modify_material_instance`
+- `create_blueprint_class`
+- `create_widget_blueprint`
+- `create_data_table`
+- `create_curve_float`
+- `create_curve_vector`
+- `create_animation_blueprint`
+- `create_blend_space`
+- `create_level_sequence`
+- `create_physics_asset`
+- `create_material_function`
+- `create_gameplay_ability`
+- `create_gameplay_effect`
+- `import_texture`
+- `import_sound_wave`
 - `check_asset_rules`
 - `generate_audit_report`
 - explicit `Window -> UE Automation` debug panel menu entry
 - controlled `set` and `map` property import paths
+- optional trusted-localhost socket task server
+- CI helper scripts for file and socket submission
 
 Phase 3 validation notes live in:
 
 ```text
 Docs/Phase3_Extension_Checklist.md
+```
+
+CI helper script notes live in:
+
+```text
+Docs/CI_Integration.md
+```
+
+Task interface and payload usage are documented in:
+
+```text
+Docs/Task_Interface_Usage.md
 ```
 
 ## Integration

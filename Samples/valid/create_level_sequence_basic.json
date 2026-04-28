@@ -1,0 +1,19 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_create_level_sequence_basic_001",
+  "task_type": "create_level_sequence",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "execution": {
+    "idempotency_key": "create_level_sequence_basic_001",
+    "skip_if_exists": false,
+    "overwrite_if_exists": false,
+    "save_after_success": true
+  },
+  "payload": {
+    "asset": {
+      "asset_type": "level_sequence",
+      "asset_name": "LS_AutomationBasic_001",
+      "package_path": "/Game/Cinematics/AutoGen"
+    }
+  }
+}

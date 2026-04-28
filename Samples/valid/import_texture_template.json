@@ -1,0 +1,20 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_import_texture_template_001",
+  "task_type": "import_texture",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "execution": {
+    "idempotency_key": "import_texture_template_001",
+    "skip_if_exists": false,
+    "overwrite_if_exists": false,
+    "save_after_success": true
+  },
+  "payload": {
+    "source_path": "D:/ReplaceWithTexture.png",
+    "asset": {
+      "asset_type": "texture",
+      "asset_name": "T_AutomationBasic_001",
+      "package_path": "/Game/Textures/AutoGen"
+    }
+  }
+}

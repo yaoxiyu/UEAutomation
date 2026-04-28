@@ -1,0 +1,20 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_create_widget_blueprint_basic_001",
+  "task_type": "create_widget_blueprint",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "execution": {
+    "idempotency_key": "create_widget_blueprint_basic_001",
+    "skip_if_exists": false,
+    "overwrite_if_exists": false,
+    "save_after_success": true
+  },
+  "payload": {
+    "asset": {
+      "asset_type": "widget_blueprint",
+      "asset_name": "WBP_AutomationBasic_001",
+      "package_path": "/Game/UI/AutoGen",
+      "parent_class": "/Script/UMG.UserWidget"
+    }
+  }
+}

@@ -25,8 +25,10 @@ public class UEEditorAutomation : ModuleRules
             "KismetCompiler",
             "LevelEditor",
             "Projects",
+            "Networking",
             "Slate",
             "SlateCore",
+            "Sockets",
             "UnrealEd"
         });
     }

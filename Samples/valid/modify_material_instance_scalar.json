@@ -1,0 +1,21 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_modify_material_instance_scalar_001",
+  "task_type": "modify_material_instance",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "execution": {
+    "save_after_success": true
+  },
+  "payload": {
+    "target_asset": {
+      "asset_path": "/Game/Materials/AutoGen/MI_AutomationBasic_001.MI_AutomationBasic_001"
+    },
+    "parameters": [
+      {
+        "name": "Roughness",
+        "type": "scalar",
+        "value": 0.45
+      }
+    ]
+  }
+}

@@ -7,6 +7,7 @@
 #include "Framework/MultiBox/MultiBoxBuilder.h"
 #include "LevelEditor.h"
 #include "Modules/ModuleManager.h"
+#include "Transport/SocketTaskServer.h"
 #include "UI/AutomationDebugPanel.h"
 #include "Widgets/Docking/SDockTab.h"
 
@@ -36,9 +37,28 @@ public:
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FModifyBlueprintDefaultsTaskExecutor>(BlueprintService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateDataAssetTaskExecutor>(AssetService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FModifyAssetPropertiesTaskExecutor>(AssetService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateMaterialInstanceTaskExecutor>(AssetService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FModifyMaterialInstanceTaskExecutor>(AssetService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateTypedAssetTaskExecutor>(AssetService, TEXT("create_blueprint_class")));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateTypedAssetTaskExecutor>(AssetService, TEXT("create_widget_blueprint")));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateTypedAssetTaskExecutor>(AssetService, TEXT("create_data_table")));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateTypedAssetTaskExecutor>(AssetService, TEXT("create_curve_float")));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateTypedAssetTaskExecutor>(AssetService, TEXT("create_curve_vector")));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateTypedAssetTaskExecutor>(AssetService, TEXT("create_animation_blueprint")));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateTypedAssetTaskExecutor>(AssetService, TEXT("create_blend_space")));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateTypedAssetTaskExecutor>(AssetService, TEXT("create_level_sequence")));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateTypedAssetTaskExecutor>(AssetService, TEXT("create_physics_asset")));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateTypedAssetTaskExecutor>(AssetService, TEXT("create_material_function")));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateTypedAssetTaskExecutor>(AssetService, TEXT("create_gameplay_ability")));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateTypedAssetTaskExecutor>(AssetService, TEXT("create_gameplay_effect")));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FImportAssetTaskExecutor>(AssetService, TEXT("import_texture")));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FImportAssetTaskExecutor>(AssetService, TEXT("import_sound_wave")));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCheckAssetRulesTaskExecutor>(AssetService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FGenerateAuditReportTaskExecutor>(AssetService));
         ApplicationService->Initialize();
+
+        SocketTaskServer = MakeShared<FSocketTaskServer>();
+        SocketTaskServer->Initialize(ApplicationService.ToSharedRef());
 
 #if ENGINE_MAJOR_VERSION >= 5
         TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateRaw(this, &FUEEditorAutomationModule::HandleTicker));
@@ -66,6 +86,11 @@ public:
         {
             ApplicationService->Shutdown();
             ApplicationService.Reset();
+        }
+        if (SocketTaskServer.IsValid())
+        {
+            SocketTaskServer->Shutdown();
+            SocketTaskServer.Reset();
         }
         UE_LOG(LogUEEditorAutomation, Log, TEXT("UEEditorAutomation module stopped."));
     }
@@ -125,10 +150,15 @@ private:
         {
             ApplicationService->Tick(DeltaTime);
         }
+        if (SocketTaskServer.IsValid())
+        {
+            SocketTaskServer->Tick();
+        }
         return true;
     }
 
     TSharedPtr<FEditorAutomationApplicationService> ApplicationService;
+    TSharedPtr<FSocketTaskServer> SocketTaskServer;
     TSharedPtr<FExtender> MenuExtender;
     FDelegateHandle TickHandle;
     const FName DebugPanelTabName = TEXT("UEEditorAutomationDebugPanel");

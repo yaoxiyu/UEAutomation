@@ -30,6 +30,48 @@ public:
     virtual bool Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
 };
 
+class FCreateMaterialInstanceTaskExecutor : public FAssetTaskExecutorBase
+{
+public:
+    explicit FCreateMaterialInstanceTaskExecutor(const TSharedRef<FAssetAutomationService>& InService);
+    virtual FString GetTaskType() const override;
+    virtual bool Validate(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+    virtual bool Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+};
+
+class FModifyMaterialInstanceTaskExecutor : public FAssetTaskExecutorBase
+{
+public:
+    explicit FModifyMaterialInstanceTaskExecutor(const TSharedRef<FAssetAutomationService>& InService);
+    virtual FString GetTaskType() const override;
+    virtual bool Validate(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+    virtual bool Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+};
+
+class FCreateTypedAssetTaskExecutor : public FAssetTaskExecutorBase
+{
+public:
+    FCreateTypedAssetTaskExecutor(const TSharedRef<FAssetAutomationService>& InService, const FString& InTaskType);
+    virtual FString GetTaskType() const override;
+    virtual bool Validate(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+    virtual bool Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+
+private:
+    FString TaskType;
+};
+
+class FImportAssetTaskExecutor : public FAssetTaskExecutorBase
+{
+public:
+    FImportAssetTaskExecutor(const TSharedRef<FAssetAutomationService>& InService, const FString& InTaskType);
+    virtual FString GetTaskType() const override;
+    virtual bool Validate(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+    virtual bool Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+
+private:
+    FString TaskType;
+};
+
 class FCheckAssetRulesTaskExecutor : public FAssetTaskExecutorBase
 {
 public:

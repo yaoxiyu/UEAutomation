@@ -73,6 +73,8 @@ bool FAutomationProtocolJson::ParseRequest(const FString& JsonText, FAutomationT
         ParseAssetSpec(*AssetObject, OutRequest.Asset);
     }
 
+    (*PayloadObject)->TryGetStringField(TEXT("source_path"), OutRequest.SourcePath);
+
     const TSharedPtr<FJsonObject>* TemplateObject = nullptr;
     if ((*PayloadObject)->TryGetObjectField(TEXT("template"), TemplateObject) && TemplateObject && TemplateObject->IsValid())
     {
@@ -133,6 +135,12 @@ bool FAutomationProtocolJson::ParseRequest(const FString& JsonText, FAutomationT
         || (*PayloadObject)->TryGetArrayField(TEXT("properties"), ClassDefaultsArray))
     {
         ParsePropertyArray(ClassDefaultsArray, OutRequest.ClassDefaults);
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* ParametersArray = nullptr;
+    if ((*PayloadObject)->TryGetArrayField(TEXT("parameters"), ParametersArray))
+    {
+        ParsePropertyArray(ParametersArray, OutRequest.Parameters);
     }
 
     const TSharedPtr<FJsonObject>* OverridesObject = nullptr;

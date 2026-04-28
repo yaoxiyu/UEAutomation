@@ -113,11 +113,13 @@ struct FAutomationTaskRequest
     TArray<FAutomationPropertyValue> ClassDefaults;
     TArray<FAutomationBatchBlueprintItem> BatchItems;
     TArray<FAutomationOperation> Operations;
+    TArray<FAutomationPropertyValue> Parameters;
     TArray<FString> Rules;
     TArray<FString> PostActions;
     FString ReportPath;
     FString ReportFormat;
     FString SourcePath;
+    FString TaskFilePath;
 };
 
 struct FAutomationAssetOutput

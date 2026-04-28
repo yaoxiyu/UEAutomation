@@ -3,7 +3,9 @@
 UEditorAutomationSettings::UEditorAutomationSettings()
 {
     bEnableDaemon = true;
+    bEnableUEAutomationSocketServer = false;
     PollIntervalSeconds = 1.0f;
+    UEAutomationSocketPort = 18777;
     MaxConcurrentTasks = 1;
     SupportedProtocolVersion = 1;
 

@@ -1,0 +1,20 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_create_blueprint_class_disallowed_parent_001",
+  "task_type": "create_blueprint_class",
+  "timestamp_utc": "2026-04-28T00:00:00Z",
+  "execution": {
+    "idempotency_key": "create_blueprint_class_disallowed_parent_001",
+    "skip_if_exists": false,
+    "overwrite_if_exists": false,
+    "save_after_success": true
+  },
+  "payload": {
+    "asset": {
+      "asset_type": "blueprint",
+      "asset_name": "BP_DisallowedParent_001",
+      "package_path": "/Game/Blueprints/AutoGen",
+      "parent_class": "/Script/Engine.PlayerController"
+    }
+  }
+}

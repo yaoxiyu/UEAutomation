@@ -49,11 +49,11 @@ void FEditorAutomationApplicationService::Tick(float DeltaTime)
     bExecuting = true;
     FAutomationTaskRequest Request;
     FAutomationTaskResult Result;
-    Request.SourcePath = DiscoveredTask.WorkingPath;
+    Request.TaskFilePath = DiscoveredTask.WorkingPath;
 
     if (FAutomationProtocolJson::ParseRequest(DiscoveredTask.JsonText, Request, Result))
     {
-        Request.SourcePath = DiscoveredTask.WorkingPath;
+        Request.TaskFilePath = DiscoveredTask.WorkingPath;
         Result = ExecuteTask(Request);
     }
 
