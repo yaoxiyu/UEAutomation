@@ -13,14 +13,14 @@
     },
     "class_defaults": [
       {
-        "name": "MaxHealth",
-        "type": "int",
-        "value": 150
+        "name": "InitialLifeSpan",
+        "type": "float",
+        "value": 30.0
       },
       {
-        "name": "MoveSpeed",
-        "type": "float",
-        "value": 420.0
+        "name": "bCanBeDamaged",
+        "type": "bool",
+        "value": false
       }
     ],
     "post_actions": [

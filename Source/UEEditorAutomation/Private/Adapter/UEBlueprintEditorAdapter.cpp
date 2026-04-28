@@ -131,7 +131,13 @@ UObject* FUEBlueprintEditorAdapter::GetComponentTemplate(UBlueprint* Blueprint, 
         return nullptr;
     }
 
-    UObject* Template = Blueprint->GeneratedClass ? Node->GetActualComponentTemplate(Blueprint->GeneratedClass) : nullptr;
+    UBlueprintGeneratedClass* BlueprintGeneratedClass = nullptr;
+    if (Blueprint && Blueprint->GeneratedClass)
+    {
+        BlueprintGeneratedClass = Cast<UBlueprintGeneratedClass>(Blueprint->GeneratedClass.Get());
+    }
+
+    UObject* Template = BlueprintGeneratedClass ? Node->GetActualComponentTemplate(BlueprintGeneratedClass) : nullptr;
     if (!Template)
     {
         Template = Node->ComponentTemplate;

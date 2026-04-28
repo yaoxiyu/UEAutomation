@@ -1,5 +1,6 @@
 #include "Application/TaskValidator.h"
 
+#include "Core/AutomationWhitelist.h"
 #include "Core/EditorAutomationSettings.h"
 #include "Misc/PackageName.h"
 
@@ -19,7 +20,8 @@ bool FTaskValidator::ValidateCommon(const FAutomationTaskRequest& Request, FAuto
         return false;
     }
 
-    if (!Settings->AllowedTaskTypes.Contains(Request.TaskType))
+    const FAutomationWhitelist Whitelist = FAutomationWhitelistProvider::Load();
+    if (!Whitelist.AllowedTaskTypes.Contains(Request.TaskType))
     {
         OutResult.AddError(TEXT("InvalidTaskType"), FString::Printf(TEXT("Task type '%s' is not allowed."), *Request.TaskType), TEXT("task_type"));
         return false;
@@ -43,8 +45,8 @@ bool FTaskValidator::ValidateCommon(const FAutomationTaskRequest& Request, FAuto
 
 bool FTaskValidator::IsAllowedAssetRoot(const FString& PackagePath) const
 {
-    const UEditorAutomationSettings* Settings = GetDefault<UEditorAutomationSettings>();
-    for (const FString& Root : Settings->AllowedAssetRoots)
+    const FAutomationWhitelist Whitelist = FAutomationWhitelistProvider::Load();
+    for (const FString& Root : Whitelist.AllowedAssetRoots)
     {
         if (PackagePath.StartsWith(Root))
         {

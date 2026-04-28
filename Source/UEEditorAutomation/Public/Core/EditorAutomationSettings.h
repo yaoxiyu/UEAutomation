@@ -43,17 +43,5 @@ public:
     int32 SupportedProtocolVersion;
 
     UPROPERTY(Config, EditAnywhere, Category="Security")
-    TArray<FString> AllowedTaskTypes;
-
-    UPROPERTY(Config, EditAnywhere, Category="Security")
-    TArray<FString> AllowedAssetRoots;
-
-    UPROPERTY(Config, EditAnywhere, Category="Security")
-    TArray<FString> AllowedParentClasses;
-
-    UPROPERTY(Config, EditAnywhere, Category="Security")
-    TArray<FString> AllowedComponentClasses;
-
-    UPROPERTY(Config, EditAnywhere, Category="Security")
-    TArray<FString> AllowedPropertyNames;
+    FFilePath WhitelistFilePath;
 };

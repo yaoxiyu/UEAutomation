@@ -1,0 +1,43 @@
+{
+  "allowed_task_types": [
+    "create_blueprint",
+    "modify_blueprint_components",
+    "modify_blueprint_defaults"
+  ],
+  "allowed_asset_roots": [
+    "/Game/Blueprints/AutoGen",
+    "/Game/UI/AutoGen",
+    "/Game/Test/AutoGen"
+  ],
+  "allowed_parent_classes": [
+    "/Script/Engine.Actor"
+  ],
+  "allowed_component_classes": [
+    "/Script/Engine.SceneComponent",
+    "/Script/Engine.StaticMeshComponent",
+    "/Script/Engine.SkeletalMeshComponent",
+    "/Script/Engine.BoxComponent",
+    "/Script/Engine.SphereComponent",
+    "/Script/Engine.CapsuleComponent",
+    "/Script/Engine.SpringArmComponent",
+    "/Script/Engine.CameraComponent",
+    "/Script/Engine.ArrowComponent",
+    "/Script/Engine.ChildActorComponent"
+  ],
+  "allowed_property_names": [
+    "StaticMesh",
+    "SkeletalMesh",
+    "RelativeLocation",
+    "RelativeRotation",
+    "RelativeScale3D",
+    "BoxExtent",
+    "SphereRadius",
+    "CapsuleRadius",
+    "CapsuleHalfHeight",
+    "CollisionProfileName",
+    "InitialLifeSpan",
+    "bCanBeDamaged",
+    "MaxHealth",
+    "MoveSpeed"
+  ]
+}

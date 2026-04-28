@@ -1,6 +1,6 @@
 #include "Domain/BlueprintAutomationService.h"
 
-#include "Core/EditorAutomationSettings.h"
+#include "Core/AutomationWhitelist.h"
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
 
@@ -168,14 +168,14 @@ bool FBlueprintAutomationService::ModifyBlueprintDefaults(const FAutomationTaskR
 
 UClass* FBlueprintAutomationService::LoadClassByPath(const FString& ClassPath, FAutomationTaskResult& OutResult, const FString& Field) const
 {
-    const UEditorAutomationSettings* Settings = GetDefault<UEditorAutomationSettings>();
-    if (Field.Contains(TEXT("parent_class")) && Settings->AllowedParentClasses.Num() > 0 && !Settings->AllowedParentClasses.Contains(ClassPath))
+    const FAutomationWhitelist Whitelist = FAutomationWhitelistProvider::Load();
+    if (Field.Contains(TEXT("parent_class")) && Whitelist.AllowedParentClasses.Num() > 0 && !Whitelist.AllowedParentClasses.Contains(ClassPath))
     {
         OutResult.AddError(TEXT("InvalidParentClass"), FString::Printf(TEXT("Parent class '%s' is not allowed."), *ClassPath), Field);
         return nullptr;
     }
 
-    if (Field.Contains(TEXT("component_class")) && Settings->AllowedComponentClasses.Num() > 0 && !Settings->AllowedComponentClasses.Contains(ClassPath))
+    if (Field.Contains(TEXT("component_class")) && Whitelist.AllowedComponentClasses.Num() > 0 && !Whitelist.AllowedComponentClasses.Contains(ClassPath))
     {
         OutResult.AddError(TEXT("ComponentClassNotAllowed"), FString::Printf(TEXT("Component class '%s' is not allowed."), *ClassPath), Field);
         return nullptr;

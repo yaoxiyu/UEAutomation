@@ -39,13 +39,23 @@ Project settings are exposed by `UEditorAutomationSettings`:
 - task/result/log directories
 - `PollIntervalSeconds`
 - `SupportedProtocolVersion`
+- `WhitelistFilePath`
+
+Security policy is loaded at runtime from:
+
+```text
+Plugins/UEEditorAutomation/Config/UEEditorAutomationWhitelist.json
+```
+
+The whitelist file controls:
+
 - allowed task types
 - allowed asset roots
 - allowed parent classes
 - allowed component classes
 - allowed property names
 
-The first implementation is intentionally whitelist-first. Extend settings before broadening protocol behavior.
+Edit the JSON whitelist instead of recompiling C++ when broadening automation scope.
 
 ## Integration
 
@@ -84,4 +94,3 @@ Results are machine-readable:
   "log_path": ""
 }
 ```
-

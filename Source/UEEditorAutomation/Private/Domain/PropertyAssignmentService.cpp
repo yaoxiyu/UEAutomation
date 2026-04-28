@@ -1,6 +1,6 @@
 #include "Domain/PropertyAssignmentService.h"
 
-#include "Core/EditorAutomationSettings.h"
+#include "Core/AutomationWhitelist.h"
 #include "Dom/JsonValue.h"
 #include "UObject/UnrealType.h"
 
@@ -23,8 +23,8 @@ bool FPropertyAssignmentService::AssignProperty(UObject* Target, const FAutomati
         return false;
     }
 
-    const UEditorAutomationSettings* Settings = GetDefault<UEditorAutomationSettings>();
-    if (!Settings->AllowedPropertyNames.Contains(PropertyValue.Name))
+    const FAutomationWhitelist Whitelist = FAutomationWhitelistProvider::Load();
+    if (!Whitelist.AllowedPropertyNames.Contains(PropertyValue.Name))
     {
         OutResult.AddError(TEXT("PropertyAssignmentNotAllowed"), FString::Printf(TEXT("Property '%s' is not allowed."), *PropertyValue.Name), FieldPrefix + TEXT(".name"));
         return false;
