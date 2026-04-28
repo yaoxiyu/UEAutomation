@@ -2,12 +2,16 @@
 
 #include "Core/AutomationLog.h"
 #include "Core/EditorAutomationSettings.h"
+#include "HAL/FileManager.h"
 #include "Misc/DateTime.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 
 void FEditorAutomationApplicationService::Initialize()
 {
     TaskSource.EnsureDirectories();
     ResultSink.EnsureDirectories();
+    RecoverStaleWorkingTasks();
     bInitialized = true;
 }
 
@@ -105,4 +109,46 @@ FAutomationTaskResult FEditorAutomationApplicationService::ExecuteTask(const FAu
         Result.Status = TEXT("succeeded");
     }
     return Result;
+}
+
+void FEditorAutomationApplicationService::RecoverStaleWorkingTasks()
+{
+    const UEditorAutomationSettings* Settings = GetDefault<UEditorAutomationSettings>();
+
+    TArray<FString> Files;
+    IFileManager::Get().FindFiles(Files, *(Settings->TaskWorkingDir.Path / TEXT("*.json")), true, false);
+    Files.Sort();
+
+    for (const FString& File : Files)
+    {
+        FDiscoveredAutomationTask Task;
+        Task.WorkingPath = Settings->TaskWorkingDir.Path / File;
+        Task.OriginalPath = Task.WorkingPath;
+
+        FAutomationTaskRequest Request;
+        FAutomationTaskResult Result;
+        if (FFileHelper::LoadFileToString(Task.JsonText, *Task.WorkingPath)
+            && FAutomationProtocolJson::ParseRequest(Task.JsonText, Request, Result))
+        {
+            Result.ProtocolVersion = Request.ProtocolVersion > 0 ? Request.ProtocolVersion : Result.ProtocolVersion;
+            Result.TaskId = Request.TaskId;
+            Result.TaskType = Request.TaskType;
+        }
+
+        if (Result.TaskId.IsEmpty())
+        {
+            Result.TaskId = FPaths::GetBaseFilename(Task.WorkingPath);
+        }
+        if (Result.TaskType.IsEmpty())
+        {
+            Result.TaskType = TEXT("<unknown>");
+        }
+
+        Result.AddLog(FString::Printf(TEXT("startup_recovery: stale working task detected at %s"), *Task.WorkingPath));
+        Result.AddError(TEXT("RecoveredStaleWorkingTask"), TEXT("Task was found in working during editor startup and was moved to failed."), TEXT("tasks.working"));
+        Result.Metrics.DurationMs = 0;
+
+        ResultSink.WriteResult(Result);
+        TaskSource.MoveToFailed(Task);
+    }
 }

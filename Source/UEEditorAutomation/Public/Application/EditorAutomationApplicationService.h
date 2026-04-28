@@ -16,6 +16,8 @@ public:
     FTaskExecutorRegistry& GetExecutorRegistry() { return ExecutorRegistry; }
 
 private:
+    void RecoverStaleWorkingTasks();
+
     bool bInitialized = false;
     bool bExecuting = false;
     float TimeSinceLastPoll = 0.0f;
