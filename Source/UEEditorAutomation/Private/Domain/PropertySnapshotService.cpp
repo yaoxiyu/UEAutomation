@@ -87,6 +87,22 @@ namespace
         Object->SetNumberField(TEXT("Z"), Z);
         return MakeShared<FJsonValueObject>(Object);
     }
+
+    bool IsDepthExemptStruct(const FProperty* Property)
+    {
+        const FStructProperty* StructProperty = CastField<FStructProperty>(Property);
+        const UScriptStruct* Struct = StructProperty ? StructProperty->Struct : nullptr;
+        if (!Struct)
+        {
+            return false;
+        }
+
+        const FString StructName = Struct->GetName();
+        return StructName == TEXT("GameplayTag")
+            || StructName == TEXT("GameplayTagContainer")
+            || StructName == TEXT("DataTableRowHandle")
+            || StructName == TEXT("ScalableFloat");
+    }
 }
 
 TSharedPtr<FJsonValue> FPropertySnapshotService::ExportPropertyValue(
@@ -101,7 +117,7 @@ TSharedPtr<FJsonValue> FPropertySnapshotService::ExportPropertyValue(
         return MakeShared<FJsonValueNull>();
     }
 
-    if (RecursionDepth >= Options.MaxPropertyDepth)
+    if (RecursionDepth >= Options.MaxPropertyDepth && !IsDepthExemptStruct(Property))
     {
         const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
         Object->SetBoolField(TEXT("truncated"), true);
@@ -231,6 +247,41 @@ TSharedPtr<FJsonValue> FPropertySnapshotService::ExportPropertyValue(
                 Object->SetNumberField(TEXT("G"), C->G);
                 Object->SetNumberField(TEXT("B"), C->B);
                 Object->SetNumberField(TEXT("A"), C->A);
+                return MakeShared<FJsonValueObject>(Object);
+            }
+            if (StructName == TEXT("GameplayTag"))
+            {
+                const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
+                if (FProperty* TagNameProperty = Struct->FindPropertyByName(TEXT("TagName")))
+                {
+                    const void* TagNameAddress = TagNameProperty->ContainerPtrToValuePtr<void>(PropertyAddress);
+                    Object->SetField(TEXT("TagName"), ExportPropertyValue(TagNameProperty, TagNameAddress, 0, Options, OutResult));
+                }
+                return MakeShared<FJsonValueObject>(Object);
+            }
+            if (StructName == TEXT("GameplayTagContainer"))
+            {
+                const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
+                if (FProperty* TagsProperty = Struct->FindPropertyByName(TEXT("GameplayTags")))
+                {
+                    const void* TagsAddress = TagsProperty->ContainerPtrToValuePtr<void>(PropertyAddress);
+                    Object->SetField(TEXT("GameplayTags"), ExportPropertyValue(TagsProperty, TagsAddress, 0, Options, OutResult));
+                }
+                return MakeShared<FJsonValueObject>(Object);
+            }
+            if (StructName == TEXT("DataTableRowHandle") || StructName == TEXT("ScalableFloat"))
+            {
+                const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
+                for (TFieldIterator<FProperty> It(Struct); It; ++It)
+                {
+                    FProperty* Inner = *It;
+                    if (!Inner || ShouldSkipForExport(Inner) || IsDenied(Inner->GetName()))
+                    {
+                        continue;
+                    }
+                    const void* InnerAddress = Inner->ContainerPtrToValuePtr<void>(PropertyAddress);
+                    Object->SetField(Inner->GetName(), ExportPropertyValue(Inner, InnerAddress, 0, Options, OutResult));
+                }
                 return MakeShared<FJsonValueObject>(Object);
             }
         }

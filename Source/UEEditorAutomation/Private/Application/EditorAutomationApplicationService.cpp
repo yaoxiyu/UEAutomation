@@ -7,6 +7,41 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
+namespace
+{
+    int32 ParseStartupRecoveryRetryCount(const FString& FilePath)
+    {
+        const FString BaseName = FPaths::GetBaseFilename(FilePath);
+        int32 RetryMarker = INDEX_NONE;
+        if (!BaseName.FindLastChar(TEXT('_'), RetryMarker))
+        {
+            return 0;
+        }
+
+        const FString Suffix = BaseName.Mid(RetryMarker + 1);
+        if (!Suffix.StartsWith(TEXT("retry")))
+        {
+            return 0;
+        }
+
+        const FString CountText = Suffix.Mid(5);
+        return CountText.IsNumeric() ? FCString::Atoi(*CountText) : 0;
+    }
+
+    FString BuildStartupRecoveryRetryPath(const FString& InboxDir, const FString& WorkingPath, int32 RetryCount)
+    {
+        FString BaseName = FPaths::GetBaseFilename(WorkingPath);
+        int32 RetryMarker = INDEX_NONE;
+        if (BaseName.FindLastChar(TEXT('_'), RetryMarker) && BaseName.Mid(RetryMarker + 1).StartsWith(TEXT("retry")))
+        {
+            BaseName.LeftInline(RetryMarker);
+        }
+
+        const FString Extension = FPaths::GetExtension(WorkingPath, true);
+        return InboxDir / FString::Printf(TEXT("%s_retry%d%s"), *BaseName, RetryCount, *Extension);
+    }
+}
+
 void FEditorAutomationApplicationService::Initialize()
 {
     TaskSource.EnsureDirectories();
@@ -124,6 +159,18 @@ void FEditorAutomationApplicationService::RecoverStaleWorkingTasks()
         FDiscoveredAutomationTask Task;
         Task.WorkingPath = Settings->TaskWorkingDir.Path / File;
         Task.OriginalPath = Task.WorkingPath;
+
+        const int32 CurrentRetryCount = ParseStartupRecoveryRetryCount(Task.WorkingPath);
+        if (Settings->MaxStartupStaleWorkingTaskRetries > 0
+            && CurrentRetryCount < Settings->MaxStartupStaleWorkingTaskRetries)
+        {
+            const int32 NextRetryCount = CurrentRetryCount + 1;
+            const FString RetryPath = BuildStartupRecoveryRetryPath(Settings->TaskInboxDir.Path, Task.WorkingPath, NextRetryCount);
+            if (IFileManager::Get().Move(*RetryPath, *Task.WorkingPath, false, true))
+            {
+                continue;
+            }
+        }
 
         FAutomationTaskRequest Request;
         FAutomationTaskResult Result;

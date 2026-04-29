@@ -22,6 +22,11 @@ bool FAnalyzeBlueprintReferenceChainTaskExecutor::Execute(const FAutomationTaskR
     return Service->AnalyzeReferenceChain(Request, OutResult);
 }
 
+bool FAnalyzeAssetTaskExecutor::Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
+{
+    return Service->AnalyzeAsset(Request, OutResult);
+}
+
 bool FRefreshBlueprintMetaCacheTaskExecutor::Validate(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
 {
     if (Request.TargetAsset.AssetPath.IsEmpty() && Request.TargetAssets.Num() == 0)

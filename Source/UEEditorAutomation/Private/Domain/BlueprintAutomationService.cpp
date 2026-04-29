@@ -138,7 +138,7 @@ bool FBlueprintAutomationService::ModifyBlueprintComponents(const FAutomationTas
         else if (Operation.Op == TEXT("update_component_properties"))
         {
             OutResult.AddLog(FString::Printf(TEXT("modify_blueprint_components: update properties for %s"), *Operation.Component.ComponentName));
-            UObject* Template = BlueprintAdapter->GetComponentTemplate(Blueprint, Operation.Component.ComponentName, Error);
+            UObject* Template = BlueprintAdapter->GetComponentTemplate(Blueprint, Operation.Component.ComponentName, Operation.ComponentLookupPolicy, Error);
             if (!Template)
             {
                 OutResult.AddError(TEXT("ComponentNotFound"), Error, FieldPrefix + TEXT(".component_name"));
@@ -249,7 +249,7 @@ bool FBlueprintAutomationService::AddComponent(UBlueprint* Blueprint, const FAut
         return false;
     }
 
-    UObject* Template = BlueprintAdapter->GetComponentTemplate(Blueprint, Component.ComponentName, Error);
+    UObject* Template = BlueprintAdapter->GetComponentTemplate(Blueprint, Component.ComponentName, TEXT("scs_first"), Error);
     if (!Template)
     {
         OutResult.AddError(TEXT("ComponentTemplateNotFound"), Error, FieldPrefix + TEXT(".component_name"));

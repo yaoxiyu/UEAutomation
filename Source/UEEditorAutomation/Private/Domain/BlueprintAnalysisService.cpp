@@ -18,6 +18,7 @@
 #include "Domain/ClassReflectionExporter.h"
 #include "Domain/CppSourceResolver.h"
 #include "Domain/NativeParentClassResolver.h"
+#include "Domain/PropertySnapshotService.h"
 #include "Engine/Blueprint.h"
 #include "HAL/FileManager.h"
 #include "Misc/DateTime.h"
@@ -106,6 +107,16 @@ namespace
         Artifact.CacheStatus = CacheStatus;
         Artifact.ParentCppMd5 = ParentCppMd5;
         OutResult.Artifacts.Add(Artifact);
+    }
+
+    FString SanitizeAssetPathForArtifact(const FString& AssetPath, const FString& Suffix)
+    {
+        FString Sanitized = AssetPath;
+        Sanitized.RemoveFromStart(TEXT("/"));
+        Sanitized.ReplaceInline(TEXT("/"), TEXT("__"));
+        Sanitized.ReplaceInline(TEXT("."), TEXT("_"));
+        Sanitized.ReplaceInline(TEXT(":"), TEXT("_"));
+        return Sanitized + Suffix;
     }
 }
 
@@ -200,6 +211,79 @@ bool FBlueprintAnalysisService::AnalyzeReferenceChain(const FAutomationTaskReque
         }
     }
 
+    return true;
+}
+
+bool FBlueprintAnalysisService::AnalyzeAsset(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
+{
+    const UEditorAutomationSettings* Settings = GetDefault<UEditorAutomationSettings>();
+    if (!ValidateAnalysisOptions(Request.Analysis, Settings, OutResult))
+    {
+        return false;
+    }
+    if (Request.TargetAsset.AssetPath.IsEmpty())
+    {
+        OutResult.AddError(TEXT("MissingRequiredField"), TEXT("target_asset.asset_path is required"), TEXT("payload.target_asset.asset_path"));
+        return false;
+    }
+
+    UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *Request.TargetAsset.AssetPath);
+    if (!Asset)
+    {
+        OutResult.AddError(TEXT("AssetNotFound"), FString::Printf(TEXT("Asset not found: %s"), *Request.TargetAsset.AssetPath), TEXT("payload.target_asset.asset_path"));
+        return false;
+    }
+    if (UBlueprint* Blueprint = Cast<UBlueprint>(Asset))
+    {
+        FAutomationTaskRequest BlueprintRequest = Request;
+        BlueprintRequest.TargetAsset.AssetPath = Blueprint->GetPathName();
+        return AnalyzeSingleBlueprint(BlueprintRequest.TargetAsset.AssetPath, BlueprintRequest, OutResult);
+    }
+
+    const FAutomationWhitelist Whitelist = FAutomationWhitelistProvider::Load();
+    if (!Whitelist.bLoaded)
+    {
+        OutResult.AddError(TEXT("WhitelistLoadFailed"), Whitelist.LoadError, TEXT("security.whitelist"));
+        return false;
+    }
+
+    FPropertySnapshotService Snapshot;
+    Snapshot.SetDeniedExportNames(Whitelist.DeniedPropertyNamesForExport);
+
+    TArray<TSharedPtr<FJsonValue>> Properties;
+    if (!Snapshot.ExportObjectProperties(Asset, Request.Analysis, Properties, OutResult))
+    {
+        return false;
+    }
+
+    bool bFallback = false;
+    FString FallbackReason;
+    FBlueprintMetaCacheService Cache;
+    const FString CacheRoot = Cache.ResolveCacheRoot(bFallback, FallbackReason);
+    if (bFallback)
+    {
+        OutResult.AddWarning(FString::Printf(TEXT("CacheRootFallback: %s"), *FallbackReason));
+    }
+
+    const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+    Root->SetNumberField(TEXT("schema_version"), 1);
+    Root->SetStringField(TEXT("artifact_type"), TEXT("asset_meta"));
+    Root->SetStringField(TEXT("asset_path"), Asset->GetPathName());
+    Root->SetStringField(TEXT("asset_class"), Asset->GetClass() ? Asset->GetClass()->GetPathName() : FString());
+    Root->SetArrayField(TEXT("properties"), Properties);
+
+    const FString ArtifactPath = FPaths::ConvertRelativePathToFull(CacheRoot / TEXT("AssetMeta") / SanitizeAssetPathForArtifact(Asset->GetPathName(), TEXT(".asset.json")));
+    FString WriteError;
+    if (!FAutomationStableJsonWriter::WriteAtomic(ArtifactPath, Root, WriteError))
+    {
+        OutResult.AddError(TEXT("MetaCacheWriteFailed"), WriteError);
+        return false;
+    }
+
+    AddArtifact(OutResult, TEXT("asset_meta"), ArtifactPath, Asset->GetPathName(), TEXT("written"), FString());
+    OutResult.Metrics.AnalyzedBlueprintCount++;
+    OutResult.bSuccess = true;
+    OutResult.Status = TEXT("succeeded");
     return true;
 }
 

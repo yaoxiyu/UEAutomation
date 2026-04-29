@@ -7,6 +7,7 @@ UEditorAutomationSettings::UEditorAutomationSettings()
     PollIntervalSeconds = 1.0f;
     UEAutomationSocketPort = 18777;
     MaxConcurrentTasks = 1;
+    MaxStartupStaleWorkingTaskRetries = 0;
     SupportedProtocolVersion = 1;
 
     TaskInboxDir.Path = TEXT("C:/UEAutomation/tasks/inbox");

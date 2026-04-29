@@ -1,7 +1,7 @@
 # UEEditorAutomation
 
 UE Editor C++ 插件，用于声明式资产自动化：蓝图、DataAsset、材质、
-曲线、GAS、审计、只读蓝图分析、资产复制、引用重写。
+曲线、GAS、审计、只读蓝图/资产分析、资产复制、引用重写。
 
 ## 文档
 
@@ -43,6 +43,14 @@ Plugins/UEEditorAutomation/Config/UEEditorAutomationTemplates.json
 
 白名单中字段为空数组表示"不限制" —— 调宽自动化范围请改 JSON，
 不要重新编译 C++。
+
+轻量回归脚本：
+
+```
+python .\Scripts\automation_test.py --samples-dir .\Samples
+```
+
+要求编辑器已由用户或 CI 手动启动；脚本不会启动编辑器或触发编译。
 
 ## 集成
 

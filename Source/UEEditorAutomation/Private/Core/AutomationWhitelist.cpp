@@ -28,13 +28,36 @@ FAutomationWhitelist FAutomationWhitelistProvider::Load()
         return Whitelist;
     }
 
+    FString PolicyMode;
+    JsonObject->TryGetStringField(TEXT("policy_mode"), PolicyMode);
+    if (PolicyMode.IsEmpty())
+    {
+        PolicyMode = TEXT("open");
+    }
+    if (PolicyMode != TEXT("open") && PolicyMode != TEXT("strict"))
+    {
+        Whitelist.LoadError = FString::Printf(TEXT("Whitelist policy_mode must be 'open' or 'strict', got '%s'."), *PolicyMode);
+        return Whitelist;
+    }
+    Whitelist.bStrictMode = PolicyMode == TEXT("strict");
+
+    if (!ReadStringArray(JsonObject, TEXT("allowed_task_types"), Whitelist.AllowedTaskTypes, Whitelist.LoadError)
+        || !ReadStringArray(JsonObject, TEXT("allowed_asset_roots"), Whitelist.AllowedAssetRoots, Whitelist.LoadError)
+        || !ReadStringArray(JsonObject, TEXT("allowed_parent_classes"), Whitelist.AllowedParentClasses, Whitelist.LoadError)
+        || !ReadStringArray(JsonObject, TEXT("allowed_component_classes"), Whitelist.AllowedComponentClasses, Whitelist.LoadError)
+        || !ReadStringArray(JsonObject, TEXT("allowed_property_names"), Whitelist.AllowedPropertyNames, Whitelist.LoadError)
+        || !ReadStringArray(JsonObject, TEXT("denied_property_names_for_export"), Whitelist.DeniedPropertyNamesForExport, Whitelist.LoadError))
+    {
+        return Whitelist;
+    }
+
+    if (Whitelist.bStrictMode && (Whitelist.AllowedTaskTypes.Num() == 0 || Whitelist.AllowedAssetRoots.Num() == 0))
+    {
+        Whitelist.LoadError = TEXT("Whitelist policy_mode='strict' requires non-empty allowed_task_types and allowed_asset_roots.");
+        return Whitelist;
+    }
+
     Whitelist.bLoaded = true;
-    ReadStringArray(JsonObject, TEXT("allowed_task_types"), Whitelist.AllowedTaskTypes);
-    ReadStringArray(JsonObject, TEXT("allowed_asset_roots"), Whitelist.AllowedAssetRoots);
-    ReadStringArray(JsonObject, TEXT("allowed_parent_classes"), Whitelist.AllowedParentClasses);
-    ReadStringArray(JsonObject, TEXT("allowed_component_classes"), Whitelist.AllowedComponentClasses);
-    ReadStringArray(JsonObject, TEXT("allowed_property_names"), Whitelist.AllowedPropertyNames);
-    ReadStringArray(JsonObject, TEXT("denied_property_names_for_export"), Whitelist.DeniedPropertyNamesForExport);
 
     return Whitelist;
 }
@@ -56,20 +79,38 @@ FString FAutomationWhitelistProvider::ResolveWhitelistPath()
     return Path;
 }
 
-void FAutomationWhitelistProvider::ReadStringArray(const TSharedPtr<FJsonObject>& JsonObject, const TCHAR* FieldName, TArray<FString>& OutValues)
+bool FAutomationWhitelistProvider::ReadStringArray(const TSharedPtr<FJsonObject>& JsonObject, const TCHAR* FieldName, TArray<FString>& OutValues, FString& OutError)
 {
-    const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-    if (!JsonObject.IsValid() || !JsonObject->TryGetArrayField(FieldName, Values))
+    if (!JsonObject.IsValid())
     {
-        return;
+        OutError = TEXT("Whitelist JSON object is invalid.");
+        return false;
     }
 
-    for (const TSharedPtr<FJsonValue>& Value : *Values)
+    const TSharedPtr<FJsonValue>* RawField = JsonObject->Values.Find(FieldName);
+    if (!RawField)
+    {
+        return true;
+    }
+    if (!RawField->IsValid() || (*RawField)->Type != EJson::Array)
+    {
+        OutError = FString::Printf(TEXT("Whitelist field '%s' must be an array of strings."), FieldName);
+        return false;
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>& Values = (*RawField)->AsArray();
+    for (const TSharedPtr<FJsonValue>& Value : Values)
     {
         FString StringValue;
         if (Value.IsValid() && Value->TryGetString(StringValue) && !StringValue.IsEmpty())
         {
             OutValues.Add(StringValue);
+            continue;
         }
+
+        OutError = FString::Printf(TEXT("Whitelist field '%s' contains a non-string or empty value."), FieldName);
+        return false;
     }
+
+    return true;
 }

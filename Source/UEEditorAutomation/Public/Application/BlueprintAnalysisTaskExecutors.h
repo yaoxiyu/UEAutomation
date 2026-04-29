@@ -31,6 +31,14 @@ public:
     virtual bool Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
 };
 
+class FAnalyzeAssetTaskExecutor : public FBlueprintAnalysisTaskExecutorBase
+{
+public:
+    using FBlueprintAnalysisTaskExecutorBase::FBlueprintAnalysisTaskExecutorBase;
+    virtual FString GetTaskType() const override { return TEXT("analyze_asset"); }
+    virtual bool Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+};
+
 class FRefreshBlueprintMetaCacheTaskExecutor : public FBlueprintAnalysisTaskExecutorBase
 {
 public:

@@ -19,6 +19,7 @@
 #include "Protocol/AutomationProtocolTypes.h"
 #include "Serialization/ArchiveReplaceObjectRef.h"
 #include "UObject/Package.h"
+#include "UObject/SoftObjectPath.h"
 #include "UObject/UnrealType.h"
 #include "UObject/UObjectGlobals.h"
 
@@ -92,6 +93,115 @@ namespace
             UObject* ToObject = ToProperty->GetObjectPropertyValue_InContainer(ToCDO);
             AddRedirectIfValid(ReplacementMap, FromObject, ToObject);
         }
+    }
+
+    void AddBlueprintCDOPrefixRedirect(TArray<TPair<FString, FString>>& PrefixRedirects, UBlueprint* FromBP, UBlueprint* ToBP)
+    {
+        if (!FromBP || !ToBP || !FromBP->GeneratedClass || !ToBP->GeneratedClass)
+        {
+            return;
+        }
+
+        UObject* FromCDO = FromBP->GeneratedClass->GetDefaultObject();
+        UObject* ToCDO = ToBP->GeneratedClass->GetDefaultObject();
+        if (FromCDO && ToCDO)
+        {
+            PrefixRedirects.Emplace(FromCDO->GetPathName(), ToCDO->GetPathName());
+        }
+    }
+
+    bool TryRewritePathByPrefix(const FString& OriginalPath, const TArray<TPair<FString, FString>>& PrefixRedirects, FString& OutPath)
+    {
+        for (const TPair<FString, FString>& Pair : PrefixRedirects)
+        {
+            const FString& FromPrefix = Pair.Key;
+            const FString& ToPrefix = Pair.Value;
+            if (FromPrefix.IsEmpty() || ToPrefix.IsEmpty())
+            {
+                continue;
+            }
+            if (OriginalPath == FromPrefix || OriginalPath.StartsWith(FromPrefix + TEXT(":")))
+            {
+                OutPath = ToPrefix + OriginalPath.Mid(FromPrefix.Len());
+                return true;
+            }
+        }
+        return false;
+    }
+
+    int32 RewriteCDOSubObjectPathReferences(UObject* TargetObject, const TArray<TPair<FString, FString>>& PrefixRedirects)
+    {
+        if (!TargetObject || PrefixRedirects.Num() == 0)
+        {
+            return 0;
+        }
+
+        int32 ReplacedCount = 0;
+        for (TFieldIterator<FProperty> It(TargetObject->GetClass(), EFieldIteratorFlags::IncludeSuper); It; ++It)
+        {
+            FProperty* Property = *It;
+            if (!Property)
+            {
+                continue;
+            }
+
+            void* ValuePtr = Property->ContainerPtrToValuePtr<void>(TargetObject);
+            if (FObjectPropertyBase* ObjectProperty = CastField<FObjectPropertyBase>(Property))
+            {
+                UObject* CurrentValue = ObjectProperty->GetObjectPropertyValue(ValuePtr);
+                if (!CurrentValue)
+                {
+                    continue;
+                }
+
+                FString NewPath;
+                if (!TryRewritePathByPrefix(CurrentValue->GetPathName(), PrefixRedirects, NewPath))
+                {
+                    continue;
+                }
+
+                UObject* NewValue = FindObject<UObject>(nullptr, *NewPath);
+                if (NewValue && NewValue != CurrentValue && NewValue->IsA(ObjectProperty->PropertyClass))
+                {
+                    ObjectProperty->SetObjectPropertyValue(ValuePtr, NewValue);
+                    ++ReplacedCount;
+                }
+                continue;
+            }
+
+            if (FSoftObjectProperty* SoftObjectProperty = CastField<FSoftObjectProperty>(Property))
+            {
+                const FSoftObjectPtr CurrentValue = SoftObjectProperty->GetPropertyValue(ValuePtr);
+                const FString CurrentPath = CurrentValue.ToSoftObjectPath().ToString();
+                FString NewPath;
+                if (TryRewritePathByPrefix(CurrentPath, PrefixRedirects, NewPath))
+                {
+                    FSoftObjectPtr NewValue(FSoftObjectPath(NewPath));
+                    SoftObjectProperty->SetPropertyValue(ValuePtr, NewValue);
+                    ++ReplacedCount;
+                }
+                continue;
+            }
+
+            if (FSoftClassProperty* SoftClassProperty = CastField<FSoftClassProperty>(Property))
+            {
+                const FSoftObjectPtr CurrentValue = SoftClassProperty->GetPropertyValue(ValuePtr);
+                const FString CurrentPath = CurrentValue.ToSoftObjectPath().ToString();
+                FString NewPath;
+                if (TryRewritePathByPrefix(CurrentPath, PrefixRedirects, NewPath))
+                {
+                    FSoftObjectPtr NewValue(FSoftObjectPath(NewPath));
+                    SoftClassProperty->SetPropertyValue(ValuePtr, NewValue);
+                    ++ReplacedCount;
+                }
+            }
+        }
+
+        if (ReplacedCount > 0)
+        {
+            TargetObject->Modify();
+        }
+        return ReplacedCount;
     }
 }
 
@@ -188,6 +298,7 @@ bool FAssetDuplicationService::RedirectAssetReferences(const FAutomationTaskRequ
 
     // Build replacement map. For Blueprint, also map source generated class to dest generated class.
     TMap<UObject*, UObject*> ReplacementMap;
+    TArray<TPair<FString, FString>> CDOSubObjectPrefixRedirects;
     int32 ResolvedCount = 0;
     int32 UnresolvedCount = 0;
     for (const FAutomationAssetRedirect& Redirect : Request.AssetRedirects)
@@ -207,6 +318,7 @@ bool FAssetDuplicationService::RedirectAssetReferences(const FAutomationTaskRequ
         {
             UBlueprint* ToBP = Cast<UBlueprint>(To);
             AddBlueprintGeneratedObjectRedirects(ReplacementMap, FromBP, ToBP);
+            AddBlueprintCDOPrefixRedirect(CDOSubObjectPrefixRedirects, FromBP, ToBP);
             if (ToBP && FromBP->SkeletonGeneratedClass && ToBP->SkeletonGeneratedClass)
             {
                 AddRedirectIfValid(ReplacementMap, FromBP->SkeletonGeneratedClass, ToBP->SkeletonGeneratedClass);
@@ -234,6 +346,7 @@ bool FAssetDuplicationService::RedirectAssetReferences(const FAutomationTaskRequ
     // Blueprint: also apply on GeneratedClass + CDO + nodes graphs.
     if (UBlueprint* TargetBP = Cast<UBlueprint>(Target))
     {
+        int32 PrefixRewriteCount = 0;
         if (TargetBP->GeneratedClass)
         {
             FArchiveReplaceObjectRef<UObject> ArClass(TargetBP->GeneratedClass, ReplacementMap, false, true, true);
@@ -242,7 +355,13 @@ bool FAssetDuplicationService::RedirectAssetReferences(const FAutomationTaskRequ
             {
                 FArchiveReplaceObjectRef<UObject> ArCDO(CDO, ReplacementMap, false, true, true);
                 ReplacedCount += ArCDO.GetCount();
+                PrefixRewriteCount += RewriteCDOSubObjectPathReferences(CDO, CDOSubObjectPrefixRedirects);
             }
+        }
+        ReplacedCount += PrefixRewriteCount;
+        if (PrefixRewriteCount > 0)
+        {
+            OutResult.AddLog(FString::Printf(TEXT("RedirectAssetReferences: cdo_subobject_prefix_replaced=%d"), PrefixRewriteCount));
         }
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(TargetBP);
         FKismetEditorUtilities::CompileBlueprint(TargetBP);
@@ -263,8 +382,11 @@ bool FAssetDuplicationService::RedirectAssetReferences(const FAutomationTaskRequ
     Output.AssetType = Target->GetClass()->GetName();
     OutResult.AssetOutputs.Add(Output);
 
-    OutResult.AddLog(FString::Printf(TEXT("RedirectAssetReferences: resolved=%d unresolved=%d replaced=%d"),
-        ResolvedCount, UnresolvedCount, ReplacedCount));
+    const FString RedirectStatus = ReplacedCount > 0
+        ? TEXT("replaced")
+        : (ResolvedCount > 0 ? TEXT("resolved_but_no_match") : TEXT("no_resolved_redirects"));
+    OutResult.AddLog(FString::Printf(TEXT("RedirectAssetReferences: status=%s resolved=%d unresolved=%d replacement_map=%d cdo_prefixes=%d replaced=%d"),
+        *RedirectStatus, ResolvedCount, UnresolvedCount, ReplacementMap.Num(), CDOSubObjectPrefixRedirects.Num(), ReplacedCount));
     OutResult.bSuccess = true;
     OutResult.Status = TEXT("succeeded");
     return true;

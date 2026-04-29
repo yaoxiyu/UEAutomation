@@ -2,9 +2,56 @@
 
 #include "Core/EditorAutomationSettings.h"
 #include "HAL/FileManager.h"
+#include "Misc/DateTime.h"
 #include "Misc/FileHelper.h"
+#include "Misc/Guid.h"
 #include "Misc/Paths.h"
 #include "Protocol/AutomationProtocolTypes.h"
+
+namespace
+{
+    FString MakeSafeFileStem(const FString& Stem)
+    {
+        FString Safe = FPaths::GetCleanFilename(Stem);
+        Safe.ReplaceInline(TEXT("\\"), TEXT("_"));
+        Safe.ReplaceInline(TEXT("/"), TEXT("_"));
+        Safe.ReplaceInline(TEXT(":"), TEXT("_"));
+        Safe.ReplaceInline(TEXT("*"), TEXT("_"));
+        Safe.ReplaceInline(TEXT("?"), TEXT("_"));
+        Safe.ReplaceInline(TEXT("\""), TEXT("_"));
+        Safe.ReplaceInline(TEXT("<"), TEXT("_"));
+        Safe.ReplaceInline(TEXT(">"), TEXT("_"));
+        Safe.ReplaceInline(TEXT("|"), TEXT("_"));
+        return Safe.IsEmpty() ? TEXT("unknown_task") : Safe;
+    }
+
+    bool WriteStringAtomic(const FString& Path, const FString& Text)
+    {
+        if (Path.IsEmpty())
+        {
+            return false;
+        }
+
+        IFileManager& FileManager = IFileManager::Get();
+        const FString Dir = FPaths::GetPath(Path);
+        if (!Dir.IsEmpty() && !FileManager.DirectoryExists(*Dir))
+        {
+            FileManager.MakeDirectory(*Dir, true);
+        }
+
+        const FString TempPath = Path + TEXT(".tmp");
+        if (!FFileHelper::SaveStringToFile(Text, *TempPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+        {
+            return false;
+        }
+        if (!FileManager.Move(*Path, *TempPath, true, true))
+        {
+            FileManager.Delete(*TempPath, false, true);
+            return false;
+        }
+        return true;
+    }
+}
 
 void FFileTaskSource::EnsureDirectories() const
 {
@@ -28,8 +75,8 @@ bool FFileTaskSource::TryAcquireNextTask(FDiscoveredAutomationTask& OutTask) con
     }
 
     OutTask.OriginalPath = Settings->TaskInboxDir.Path / Files[0];
-    OutTask.WorkingPath = Settings->TaskWorkingDir.Path / Files[0];
-    if (!MoveFileReplacing(OutTask.OriginalPath, OutTask.WorkingPath))
+    const FString DesiredWorkingPath = Settings->TaskWorkingDir.Path / Files[0];
+    if (!MoveFileToUniquePath(OutTask.OriginalPath, DesiredWorkingPath, OutTask.WorkingPath))
     {
         return false;
     }
@@ -40,19 +87,50 @@ bool FFileTaskSource::TryAcquireNextTask(FDiscoveredAutomationTask& OutTask) con
 bool FFileTaskSource::MoveToDone(const FDiscoveredAutomationTask& Task) const
 {
     const UEditorAutomationSettings* Settings = GetDefault<UEditorAutomationSettings>();
-    return MoveFileReplacing(Task.WorkingPath, Settings->TaskDoneDir.Path / FPaths::GetCleanFilename(Task.WorkingPath));
+    FString ActualPath;
+    return MoveFileToUniquePath(Task.WorkingPath, Settings->TaskDoneDir.Path / FPaths::GetCleanFilename(Task.WorkingPath), ActualPath);
 }
 
 bool FFileTaskSource::MoveToFailed(const FDiscoveredAutomationTask& Task) const
 {
     const UEditorAutomationSettings* Settings = GetDefault<UEditorAutomationSettings>();
-    return MoveFileReplacing(Task.WorkingPath, Settings->TaskFailedDir.Path / FPaths::GetCleanFilename(Task.WorkingPath));
+    FString ActualPath;
+    return MoveFileToUniquePath(Task.WorkingPath, Settings->TaskFailedDir.Path / FPaths::GetCleanFilename(Task.WorkingPath), ActualPath);
 }
 
-bool FFileTaskSource::MoveFileReplacing(const FString& From, const FString& To)
+bool FFileTaskSource::MoveFileToUniquePath(const FString& From, const FString& DesiredTo, FString& OutActualTo)
 {
-    IFileManager::Get().Delete(*To, false, true);
-    return IFileManager::Get().Move(*To, *From, true, true);
+    OutActualTo = MakeUniquePath(DesiredTo);
+    return IFileManager::Get().Move(*OutActualTo, *From, false, true);
+}
+
+FString FFileTaskSource::MakeUniquePath(const FString& DesiredPath)
+{
+    IFileManager& FileManager = IFileManager::Get();
+    const FString Dir = FPaths::GetPath(DesiredPath);
+    if (!Dir.IsEmpty() && !FileManager.DirectoryExists(*Dir))
+    {
+        FileManager.MakeDirectory(*Dir, true);
+    }
+
+    if (!FileManager.FileExists(*DesiredPath))
+    {
+        return DesiredPath;
+    }
+
+    const FString Base = FPaths::GetBaseFilename(DesiredPath);
+    const FString Ext = FPaths::GetExtension(DesiredPath, true);
+    const FString Stamp = FDateTime::UtcNow().ToString(TEXT("%Y%m%dT%H%M%S%fZ"));
+    for (int32 Counter = 1; Counter < 1000; ++Counter)
+    {
+        const FString Candidate = Dir / FString::Printf(TEXT("%s_%s_%03d%s"), *Base, *Stamp, Counter, *Ext);
+        if (!FileManager.FileExists(*Candidate))
+        {
+            return Candidate;
+        }
+    }
+
+    return Dir / FString::Printf(TEXT("%s_%s%s"), *Base, *FGuid::NewGuid().ToString(EGuidFormats::Digits), *Ext);
 }
 
 void FFileTaskResultSink::EnsureDirectories() const
@@ -66,7 +144,8 @@ bool FFileTaskResultSink::WriteResult(FAutomationTaskResult& Result) const
 {
     const UEditorAutomationSettings* Settings = GetDefault<UEditorAutomationSettings>();
 
-    Result.LogPath = Settings->LogDir.Path / FString::Printf(TEXT("%s.log"), *Result.TaskId);
+    const FString SafeTaskId = MakeSafeFileStem(Result.TaskId);
+    Result.LogPath = Settings->LogDir.Path / FString::Printf(TEXT("%s.log"), *SafeTaskId);
     FString LogText;
     LogText += FString::Printf(TEXT("task_id=%s\n"), *Result.TaskId);
     LogText += FString::Printf(TEXT("task_type=%s\n"), *Result.TaskType);
@@ -85,7 +164,10 @@ bool FFileTaskResultSink::WriteResult(FAutomationTaskResult& Result) const
     {
         LogText += FString::Printf(TEXT("error code=%s field=%s message=%s\n"), *Error.Code, *Error.Field, *Error.Message);
     }
-    FFileHelper::SaveStringToFile(LogText, *Result.LogPath);
+    if (!WriteStringAtomic(Result.LogPath, LogText))
+    {
+        return false;
+    }
 
     FString JsonText;
     if (!FAutomationProtocolJson::SerializeResult(Result, JsonText))
@@ -93,6 +175,6 @@ bool FFileTaskResultSink::WriteResult(FAutomationTaskResult& Result) const
         return false;
     }
 
-    const FString ResultPath = Settings->ResultDir.Path / FString::Printf(TEXT("%s.result.json"), *Result.TaskId);
-    return FFileHelper::SaveStringToFile(JsonText, *ResultPath);
+    const FString ResultPath = Settings->ResultDir.Path / FString::Printf(TEXT("%s.result.json"), *SafeTaskId);
+    return WriteStringAtomic(ResultPath, JsonText);
 }

@@ -1,4 +1,5 @@
 {
+  "policy_mode": "open",
   "allowed_task_types": [],
   "allowed_asset_roots": [],
   "allowed_parent_classes": [],

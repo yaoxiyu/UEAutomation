@@ -19,7 +19,8 @@ public:
     bool MoveToFailed(const FDiscoveredAutomationTask& Task) const;
 
 private:
-    static bool MoveFileReplacing(const FString& From, const FString& To);
+    static bool MoveFileToUniquePath(const FString& From, const FString& DesiredTo, FString& OutActualTo);
+    static FString MakeUniquePath(const FString& DesiredPath);
 };
 
 class FFileTaskResultSink

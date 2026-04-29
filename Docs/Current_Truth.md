@@ -48,9 +48,12 @@ Config/UEEditorAutomationTemplates.json    蓝图模板
 
 - 文件轮询 daemon (`inbox -> working -> done/failed`)
 - 启动时回收 stale `working` 任务，标记为 `RecoveredStaleWorkingTask`
+ ；如设置 `MaxStartupStaleWorkingTaskRetries > 0`，会先按预算回投 inbox
 - 可选本地 socket server，监听 `127.0.0.1:18777`
   （由 `bEnableUEAutomationSocketServer` 开关控制）
 - 每任务独立的 `*.result.json` 与 `*.log`
+- result/log 采用临时文件 + rename 的原子写路径；done/failed 任务归档
+  遇到同名文件会追加 UTC 后缀，不覆盖历史任务文件
 
 ### 蓝图创建与修改
 
@@ -65,6 +68,8 @@ Config/UEEditorAutomationTemplates.json    蓝图模板
 - `modify_blueprint_defaults` —— 通过 ImportText 写入 CDO 属性
 
 组件模板查找会同时遍历 SCS 节点和父类的 native UPROPERTY 组件字段。
+`update_component_properties` 支持 `component_lookup_policy`，可在
+`scs_first`、`native_first`、`scs_only`、`native_only` 间选择。
 
 ### 属性赋值
 
@@ -74,6 +79,8 @@ Config/UEEditorAutomationTemplates.json    蓝图模板
 - 结构体递归：struct 字段本身可以是容器、enum、子 struct、对象引用
 - 特化路径：`StaticMesh`、`SkeletalMesh`、`CollisionProfileName`
 - Phase 4 truncated 标记会在写入阶段被检测并拒绝
+- 写入器会检查 `ImportText` 完整消费输入，并对写入后的属性做
+  `ExportText -> ImportText -> Identical` 往返校验
 
 ### 非蓝图资产创建
 
@@ -104,6 +111,8 @@ PhysicsAsset 走非交互的 `FPhysicsAssetUtils::CreateFromSkeletalMesh`
   写出 `<asset>.graph.json`
 - `refresh_blueprint_meta_cache` —— 强制刷新
 - `export_blueprint_ai_context` —— 紧凑的 `<asset>.context.json`
+- `analyze_asset` —— 任意非蓝图 `UObject` 顶层 UPROPERTY 导出；
+  蓝图目标会走 `analyze_blueprint`
 
 缓存状态：
 
@@ -130,7 +139,8 @@ miss_source_unresolved
 - `redirect_asset_references` —— `FArchiveReplaceObjectRef<UObject>`
   扫描目标资产、`GeneratedClass`、CDO。蓝图目标还会遍历 Q-CDO /
   CopyQ-CDO 同名 `FObjectPropertyBase` 字段并加入 replacement map，
-  让 native sub-object 引用能被重绑定。完成后重新编译目标蓝图。
+  让 native sub-object 引用能被重绑定；还会对匹配源 CDO 前缀的
+  sub-object 路径引用做目标 CDO 前缀替换。完成后重新编译目标蓝图。
 - `list_directory_assets` —— Asset Registry 目录枚举，artifact 写到
   `BlueprintMetaCache/DirectoryListings/`。
 

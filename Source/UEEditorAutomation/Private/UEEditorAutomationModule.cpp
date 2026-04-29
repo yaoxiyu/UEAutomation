@@ -63,6 +63,7 @@ public:
         TSharedRef<FBlueprintAnalysisService> AnalysisService = MakeShared<FBlueprintAnalysisService>();
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FAnalyzeBlueprintTaskExecutor>(AnalysisService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FAnalyzeBlueprintReferenceChainTaskExecutor>(AnalysisService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FAnalyzeAssetTaskExecutor>(AnalysisService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FRefreshBlueprintMetaCacheTaskExecutor>(AnalysisService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FExportBlueprintAIContextTaskExecutor>(AnalysisService));
 

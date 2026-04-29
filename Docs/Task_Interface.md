@@ -90,6 +90,15 @@ sample:    Samples/modify_blueprint_components.json
 顶层（不要嵌在 `component` 子对象里）。除 SCS 节点外，父类的 native
 UPROPERTY 组件也能用同样的名字访问。
 
+同名 SCS/native 组件可用 `component_lookup_policy` 显式控制：
+
+| policy | 行为 |
+|---|---|
+| `scs_first` | 默认值。先查 SCS 层级，再查 native UPROPERTY 组件 |
+| `native_first` | 先查 native UPROPERTY 组件，再查 SCS |
+| `scs_only` | 只查 SCS |
+| `native_only` | 只查 native UPROPERTY 组件 |
+
 #### `modify_blueprint_defaults`
 
 ```
@@ -207,6 +216,12 @@ export_only_editable_properties (默认 true)
 单蓝图分析。源/资产/options 任一变化时重写 meta。
 样例：`Samples/valid/analyze_blueprint_basic.json`。
 
+#### `analyze_asset`
+
+任意 `UObject` 资产顶层 UPROPERTY 导出。非蓝图资产会写出
+`BlueprintMetaCache/AssetMeta/<asset>.asset.json`；如果目标是蓝图，
+会转到 `analyze_blueprint` 路径。
+
 #### `analyze_blueprint_reference_chain`
 
 递归 BFS。同时写出 `<asset>.graph.json`，并对每个引用蓝图生成对应
@@ -286,6 +301,7 @@ Config/UEEditorAutomationWhitelist.json
 
 可控字段（**空数组 = 不限制**）：
 
+- `policy_mode`: `open` 或 `strict`
 - `allowed_task_types`
 - `allowed_asset_roots`
 - `allowed_parent_classes`
@@ -294,5 +310,11 @@ Config/UEEditorAutomationWhitelist.json
 - `denied_property_names_for_export`
 
 调宽自动化范围请改 JSON，不要在 C++ 里硬编码。
+`policy_mode="open"` 时空数组表示不限制；`policy_mode="strict"` 时
+`allowed_task_types` 与 `allowed_asset_roots` 必须非空，否则加载失败。
 Phase 4 分析任务是只读，不受 asset-root 白名单约束 ——
 `allowed_task_types` 是唯一开关。
+
+非只读任务会校验所有读写资产路径，包括 `source_asset_path`、
+`destination_package_path`、`target_asset.asset_path`、`redirects[]`、
+`directory_path` 和 batch item 的 `asset.package_path`。

@@ -150,15 +150,37 @@ bool FUEBlueprintEditorAdapter::RemoveComponentNode(UBlueprint* Blueprint, const
     return true;
 }
 
-UObject* FUEBlueprintEditorAdapter::GetComponentTemplate(UBlueprint* Blueprint, const FString& ComponentName, FString& OutError)
+UObject* FUEBlueprintEditorAdapter::GetComponentTemplate(UBlueprint* Blueprint, const FString& ComponentName, const FString& LookupPolicy, FString& OutError)
 {
-    USCS_Node* Node = FindSCSNodeInHierarchy(Blueprint, ComponentName);
-    if (!Node)
+    const FString Policy = LookupPolicy.IsEmpty() ? TEXT("scs_first") : LookupPolicy.ToLower();
+    if (Policy != TEXT("scs_first") && Policy != TEXT("native_first") && Policy != TEXT("scs_only") && Policy != TEXT("native_only"))
     {
-        UObject* NativeTemplate = FindNativeComponentTemplate(Blueprint, ComponentName);
-        if (NativeTemplate)
+        OutError = FString::Printf(TEXT("Unsupported component_lookup_policy '%s'."), *LookupPolicy);
+        return nullptr;
+    }
+
+    if (Policy == TEXT("native_first") || Policy == TEXT("native_only"))
+    {
+        if (UObject* NativeTemplate = FindNativeComponentTemplate(Blueprint, ComponentName))
         {
             return NativeTemplate;
+        }
+        if (Policy == TEXT("native_only"))
+        {
+            OutError = FString::Printf(TEXT("Native component '%s' not found."), *ComponentName);
+            return nullptr;
+        }
+    }
+
+    USCS_Node* Node = Policy == TEXT("native_only") ? nullptr : FindSCSNodeInHierarchy(Blueprint, ComponentName);
+    if (!Node)
+    {
+        if (Policy == TEXT("scs_first"))
+        {
+            if (UObject* NativeTemplate = FindNativeComponentTemplate(Blueprint, ComponentName))
+            {
+                return NativeTemplate;
+            }
         }
 
         OutError = FString::Printf(TEXT("Component '%s' not found."), *ComponentName);

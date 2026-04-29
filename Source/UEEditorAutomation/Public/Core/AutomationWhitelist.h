@@ -5,6 +5,7 @@
 struct FAutomationWhitelist
 {
     bool bLoaded = false;
+    bool bStrictMode = false;
     FString LoadError;
     TArray<FString> AllowedTaskTypes;
     TArray<FString> AllowedAssetRoots;
@@ -21,5 +22,5 @@ public:
 
 private:
     static FString ResolveWhitelistPath();
-    static void ReadStringArray(const TSharedPtr<class FJsonObject>& JsonObject, const TCHAR* FieldName, TArray<FString>& OutValues);
+    static bool ReadStringArray(const TSharedPtr<class FJsonObject>& JsonObject, const TCHAR* FieldName, TArray<FString>& OutValues, FString& OutError);
 };

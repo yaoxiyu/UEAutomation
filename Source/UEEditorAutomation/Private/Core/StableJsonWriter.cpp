@@ -52,11 +52,6 @@ bool FAutomationStableJsonWriter::WriteAtomic(
         return false;
     }
 
-    if (FileManager.FileExists(*AbsolutePath))
-    {
-        FileManager.Delete(*AbsolutePath, false, true);
-    }
-
     if (!FileManager.Move(*AbsolutePath, *TempPath, true, true))
     {
         OutError = FString::Printf(TEXT("StableJsonWriter: failed to move %s -> %s"), *TempPath, *AbsolutePath);

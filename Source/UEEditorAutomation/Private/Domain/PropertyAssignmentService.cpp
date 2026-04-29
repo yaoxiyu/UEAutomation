@@ -123,6 +123,23 @@ namespace
         OutText = FString::Printf(TEXT("(TagName=\"%s\")"), *TagName);
         return true;
     }
+
+    bool HasOnlyTrailingWhitespace(const TCHAR* Text)
+    {
+        if (!Text)
+        {
+            return false;
+        }
+        while (*Text != TEXT('\0'))
+        {
+            if (!FChar::IsWhitespace(*Text))
+            {
+                return false;
+            }
+            ++Text;
+        }
+        return true;
+    }
 }
 
 bool FPropertyAssignmentService::AssignProperties(UObject* Target, const TArray<FAutomationPropertyValue>& Properties, FAutomationTaskResult& OutResult, const FString& FieldPrefix) const
@@ -331,6 +348,52 @@ bool FPropertyAssignmentService::ImportTextValue(UObject* Target, FProperty* Pro
     if (!Result)
     {
         OutError = FString::Printf(TEXT("Failed to import '%s' into property '%s'."), *ImportText, *PropertyValue.Name);
+        return false;
+    }
+    if (!HasOnlyTrailingWhitespace(Result))
+    {
+        OutError = FString::Printf(TEXT("Property '%s' only partially imported '%s'. Remaining text starts with '%s'."),
+            *PropertyValue.Name, *ImportText, Result);
+        return false;
+    }
+
+    if (!ValidateImportedPropertyRoundTrip(Target, Property, PropertyValue.Name, OutError))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+bool FPropertyAssignmentService::ValidateImportedPropertyRoundTrip(UObject* Target, FProperty* Property, const FString& PropertyName, FString& OutError) const
+{
+    if (!Target || !Property)
+    {
+        OutError = FString::Printf(TEXT("Property '%s' round-trip validation target is invalid."), *PropertyName);
+        return false;
+    }
+
+    void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Target);
+    FString ExportedText;
+    Property->ExportTextItem(ExportedText, ValuePtr, nullptr, Target, PPF_None);
+
+    uint8* Scratch = static_cast<uint8*>(FMemory::Malloc(Property->GetSize(), Property->GetMinAlignment()));
+    Property->InitializeValue(Scratch);
+    const TCHAR* ImportResult = Property->ImportText(*ExportedText, Scratch, PPF_None, Target);
+    if (!ImportResult || !HasOnlyTrailingWhitespace(ImportResult))
+    {
+        Property->DestroyValue(Scratch);
+        FMemory::Free(Scratch);
+        OutError = FString::Printf(TEXT("Property '%s' failed export/import round-trip for exported value '%s'."), *PropertyName, *ExportedText);
+        return false;
+    }
+
+    const bool bIdentical = Property->Identical(ValuePtr, Scratch, PPF_None);
+    Property->DestroyValue(Scratch);
+    FMemory::Free(Scratch);
+    if (!bIdentical)
+    {
+        OutError = FString::Printf(TEXT("Property '%s' did not survive export/import round-trip. Exported value: '%s'."), *PropertyName, *ExportedText);
         return false;
     }
 

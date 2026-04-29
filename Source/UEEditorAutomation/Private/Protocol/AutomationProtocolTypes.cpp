@@ -180,6 +180,7 @@ bool FAutomationProtocolJson::ParseRequest(const FString& JsonText, FAutomationT
 
             FAutomationOperation Operation;
             OperationObject->TryGetStringField(TEXT("op"), Operation.Op);
+            OperationObject->TryGetStringField(TEXT("component_lookup_policy"), Operation.ComponentLookupPolicy);
             ParseComponentSpec(OperationObject, Operation.Component);
             const TArray<TSharedPtr<FJsonValue>>* PropertiesArray = nullptr;
             if (OperationObject->TryGetArrayField(TEXT("properties"), PropertiesArray))

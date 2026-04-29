@@ -103,6 +103,7 @@ struct FAutomationExecutionOptions
 struct FAutomationOperation
 {
     FString Op;
+    FString ComponentLookupPolicy;
     FAutomationComponentSpec Component;
     TArray<FAutomationPropertyValue> Properties;
 };

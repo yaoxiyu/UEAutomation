@@ -14,6 +14,7 @@ public:
 private:
     bool TryAssignSpecialProperty(UObject* Target, const FAutomationPropertyValue& PropertyValue, FAutomationTaskResult& OutResult, const FString& FieldPrefix, bool& bOutHandled) const;
     bool ImportTextValue(UObject* Target, FProperty* Property, const FAutomationPropertyValue& PropertyValue, FString& OutError) const;
+    bool ValidateImportedPropertyRoundTrip(UObject* Target, FProperty* Property, const FString& PropertyName, FString& OutError) const;
     bool JsonValueToImportTextForProperty(const TSharedPtr<FJsonValue>& Value, FProperty* Property, FString& OutImportText, FString& OutError) const;
     bool JsonObjectToStructImportText(const TSharedPtr<class FJsonObject>& Object, class FStructProperty* Property, FString& OutImportText, FString& OutError) const;
     bool TryBuildSpecialStructImportText(const TSharedPtr<class FJsonObject>& Object, class FStructProperty* Property, FString& OutImportText, FString& OutError, bool& bOutHandled) const;

@@ -27,6 +27,9 @@ public:
     UPROPERTY(Config, EditAnywhere, Category="Execution", meta=(ClampMin="1", ClampMax="1"))
     int32 MaxConcurrentTasks;
 
+    UPROPERTY(Config, EditAnywhere, Category="Execution", meta=(ClampMin="0", ClampMax="10"))
+    int32 MaxStartupStaleWorkingTaskRetries;
+
     UPROPERTY(Config, EditAnywhere, Category="Paths")
     FDirectoryPath TaskInboxDir;
 
