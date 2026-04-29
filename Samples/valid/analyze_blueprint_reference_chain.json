@@ -1,0 +1,33 @@
+{
+  "protocol_version": 1,
+  "task_id": "sample_analyze_blueprint_reference_chain_001",
+  "task_type": "analyze_blueprint_reference_chain",
+  "timestamp_utc": "2026-04-28T09:00:00Z",
+  "execution": {
+    "priority": "normal",
+    "save_after_success": false,
+    "open_after_success": false
+  },
+  "payload": {
+    "target_asset": {
+      "asset_path": "/Game/Blueprints/AutoGen/BP_MetaTestRoot.BP_MetaTestRoot"
+    },
+    "analysis": {
+      "force_refresh": false,
+      "use_cache": true,
+      "include_native_cxx": true,
+      "include_blueprint_snapshot": true,
+      "include_class_defaults": true,
+      "include_components": true,
+      "include_references": true,
+      "include_referencers": true,
+      "include_graph_summary": true,
+      "include_graph_pins": false,
+      "reference_depth": 2,
+      "max_nodes": 64,
+      "max_edges": 256,
+      "max_property_depth": 8,
+      "max_array_elements": 128
+    }
+  }
+}

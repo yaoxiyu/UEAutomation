@@ -34,6 +34,7 @@ FAutomationWhitelist FAutomationWhitelistProvider::Load()
     ReadStringArray(JsonObject, TEXT("allowed_parent_classes"), Whitelist.AllowedParentClasses);
     ReadStringArray(JsonObject, TEXT("allowed_component_classes"), Whitelist.AllowedComponentClasses);
     ReadStringArray(JsonObject, TEXT("allowed_property_names"), Whitelist.AllowedPropertyNames);
+    ReadStringArray(JsonObject, TEXT("denied_property_names_for_export"), Whitelist.DeniedPropertyNamesForExport);
 
     return Whitelist;
 }

@@ -15,7 +15,8 @@ private:
     bool TryAssignSpecialProperty(UObject* Target, const FAutomationPropertyValue& PropertyValue, FAutomationTaskResult& OutResult, const FString& FieldPrefix, bool& bOutHandled) const;
     bool ImportTextValue(UObject* Target, FProperty* Property, const FAutomationPropertyValue& PropertyValue, FString& OutError) const;
     bool JsonValueToImportTextForProperty(const TSharedPtr<FJsonValue>& Value, FProperty* Property, FString& OutImportText, FString& OutError) const;
-    bool JsonObjectToStructImportText(const TSharedPtr<class FJsonObject>& Object, FString& OutImportText, FString& OutError) const;
+    bool JsonObjectToStructImportText(const TSharedPtr<class FJsonObject>& Object, class FStructProperty* Property, FString& OutImportText, FString& OutError) const;
+    bool TryBuildSpecialStructImportText(const TSharedPtr<class FJsonObject>& Object, class FStructProperty* Property, FString& OutImportText, FString& OutError, bool& bOutHandled) const;
     bool JsonArrayToArrayImportText(const TArray<TSharedPtr<FJsonValue>>& Array, class FArrayProperty* Property, FString& OutImportText, FString& OutError) const;
     bool JsonArrayToSetImportText(const TArray<TSharedPtr<FJsonValue>>& Array, class FSetProperty* Property, FString& OutImportText, FString& OutError) const;
     bool JsonObjectToMapImportText(const TSharedPtr<class FJsonObject>& Object, class FMapProperty* Property, FString& OutImportText, FString& OutError) const;

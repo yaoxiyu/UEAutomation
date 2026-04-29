@@ -169,6 +169,11 @@ bool IsAllowedBatchPackagePath(const FString& PackagePath)
         return false;
     }
 
+    if (Whitelist.AllowedAssetRoots.Num() == 0)
+    {
+        return true;
+    }
+
     for (const FString& Root : Whitelist.AllowedAssetRoots)
     {
         if (PackagePath.StartsWith(Root))

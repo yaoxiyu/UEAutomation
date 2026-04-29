@@ -53,4 +53,34 @@ public:
 
     UPROPERTY(Config, EditAnywhere, Category="Templates")
     FFilePath TemplateRegistryFilePath;
+
+    UPROPERTY(Config, EditAnywhere, Category="UE Automation|Analysis")
+    bool bEnableBlueprintMetaCache;
+
+    UPROPERTY(Config, EditAnywhere, Category="UE Automation|Analysis")
+    FDirectoryPath BlueprintMetaCacheDir;
+
+    UPROPERTY(Config, EditAnywhere, Category="UE Automation|Analysis", meta=(ClampMin="0", ClampMax="8"))
+    int32 MaxReferenceAnalysisDepth;
+
+    UPROPERTY(Config, EditAnywhere, Category="UE Automation|Analysis", meta=(ClampMin="1", ClampMax="32"))
+    int32 MaxPropertyExportDepth;
+
+    UPROPERTY(Config, EditAnywhere, Category="UE Automation|Analysis", meta=(ClampMin="1", ClampMax="65536"))
+    int32 MaxArrayExportElements;
+
+    UPROPERTY(Config, EditAnywhere, Category="UE Automation|Analysis", meta=(ClampMin="1", ClampMax="65536"))
+    int32 MaxReferenceGraphNodes;
+
+    UPROPERTY(Config, EditAnywhere, Category="UE Automation|Analysis", meta=(ClampMin="1", ClampMax="262144"))
+    int32 MaxReferenceGraphEdges;
+
+    UPROPERTY(Config, EditAnywhere, Category="UE Automation|Analysis")
+    bool bExportBlueprintGraphReadOnly;
+
+    UPROPERTY(Config, EditAnywhere, Category="UE Automation|Analysis")
+    bool bExportReferencers;
+
+    UPROPERTY(Config, EditAnywhere, Category="UE Automation|Analysis")
+    bool bAllowSourceUnresolvedCache;
 };

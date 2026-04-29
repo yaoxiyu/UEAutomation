@@ -11,6 +11,7 @@ struct FAutomationWhitelist
     TArray<FString> AllowedParentClasses;
     TArray<FString> AllowedComponentClasses;
     TArray<FString> AllowedPropertyNames;
+    TArray<FString> DeniedPropertyNamesForExport;
 };
 
 class FAutomationWhitelistProvider

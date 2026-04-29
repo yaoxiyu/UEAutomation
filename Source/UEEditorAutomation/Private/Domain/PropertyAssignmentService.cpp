@@ -10,6 +10,121 @@
 #include "Engine/StaticMesh.h"
 #include "UObject/UnrealType.h"
 
+namespace
+{
+    FString NormalizeImportPath(const FString& Value)
+    {
+        int32 FirstQuote = INDEX_NONE;
+        int32 LastQuote = INDEX_NONE;
+        if (Value.FindChar(TEXT('\''), FirstQuote) && Value.FindLastChar(TEXT('\''), LastQuote) && LastQuote > FirstQuote)
+        {
+            return Value.Mid(FirstQuote + 1, LastQuote - FirstQuote - 1);
+        }
+        return Value;
+    }
+
+    bool IsTruncatedObject(const TSharedPtr<FJsonObject>& Object)
+    {
+        bool bTruncated = false;
+        return Object.IsValid() && Object->TryGetBoolField(TEXT("truncated"), bTruncated) && bTruncated;
+    }
+
+    bool IsTruncatedValue(const TSharedPtr<FJsonValue>& Value)
+    {
+        return Value.IsValid() && Value->Type == EJson::Object && IsTruncatedObject(Value->AsObject());
+    }
+
+    FString JsonStringOrNone(const TSharedPtr<FJsonObject>& Object, const TCHAR* FieldName)
+    {
+        if (!Object.IsValid())
+        {
+            return TEXT("None");
+        }
+
+        const TSharedPtr<FJsonValue>* Value = Object->Values.Find(FieldName);
+        if (!Value || !Value->IsValid() || (*Value)->Type == EJson::Null)
+        {
+            return TEXT("None");
+        }
+        if ((*Value)->Type == EJson::Object)
+        {
+            FString Name;
+            if ((*Value)->AsObject()->TryGetStringField(TEXT("name"), Name) && !Name.IsEmpty())
+            {
+                return Name;
+            }
+            if ((*Value)->AsObject()->TryGetStringField(TEXT("TagName"), Name) && !Name.IsEmpty())
+            {
+                return Name;
+            }
+        }
+
+        FString StringValue = (*Value)->AsString();
+        return StringValue.IsEmpty() ? TEXT("None") : StringValue;
+    }
+
+    FString JsonNumberOrDefault(const TSharedPtr<FJsonObject>& Object, const TCHAR* FieldName, const TCHAR* DefaultValue)
+    {
+        if (!Object.IsValid())
+        {
+            return DefaultValue;
+        }
+        double Number = 0.0;
+        if (Object->TryGetNumberField(FieldName, Number))
+        {
+            return FString::SanitizeFloat(Number);
+        }
+        return DefaultValue;
+    }
+
+    FString JsonBoolOrDefault(const TSharedPtr<FJsonObject>& Object, const TCHAR* FieldName, bool bDefault)
+    {
+        bool bValue = bDefault;
+        if (Object.IsValid())
+        {
+            Object->TryGetBoolField(FieldName, bValue);
+        }
+        return bValue ? TEXT("True") : TEXT("False");
+    }
+
+    bool BuildGameplayTagImportTextFromValue(const TSharedPtr<FJsonValue>& Value, FString& OutText, FString& OutError)
+    {
+        if (!Value.IsValid() || Value->Type == EJson::Null)
+        {
+            OutText = TEXT("(TagName=\"None\")");
+            return true;
+        }
+        if (IsTruncatedValue(Value))
+        {
+            OutError = TEXT("GameplayTag value is truncated.");
+            return false;
+        }
+
+        FString TagName;
+        if (Value->Type == EJson::Object)
+        {
+            const TSharedPtr<FJsonObject> TagObject = Value->AsObject();
+            const TSharedPtr<FJsonValue>* TagNameValue = TagObject->Values.Find(TEXT("TagName"));
+            if (TagNameValue && IsTruncatedValue(*TagNameValue))
+            {
+                OutError = TEXT("GameplayTag.TagName is truncated.");
+                return false;
+            }
+            TagObject->TryGetStringField(TEXT("TagName"), TagName);
+        }
+        else
+        {
+            TagName = Value->AsString();
+        }
+        if (TagName.IsEmpty())
+        {
+            TagName = TEXT("None");
+        }
+        OutText = FString::Printf(TEXT("(TagName=\"%s\")"), *TagName);
+        return true;
+    }
+}
+
 bool FPropertyAssignmentService::AssignProperties(UObject* Target, const TArray<FAutomationPropertyValue>& Properties, FAutomationTaskResult& OutResult, const FString& FieldPrefix) const
 {
     bool bOk = true;
@@ -36,7 +151,7 @@ bool FPropertyAssignmentService::AssignProperty(UObject* Target, const FAutomati
         return false;
     }
 
-    if (!Whitelist.AllowedPropertyNames.Contains(PropertyValue.Name))
+    if (Whitelist.AllowedPropertyNames.Num() > 0 && !Whitelist.AllowedPropertyNames.Contains(PropertyValue.Name))
     {
         OutResult.AddError(TEXT("PropertyAssignmentNotAllowed"), FString::Printf(TEXT("Property '%s' is not allowed."), *PropertyValue.Name), FieldPrefix + TEXT(".name"));
         return false;
@@ -266,7 +381,7 @@ bool FPropertyAssignmentService::JsonValueToImportTextForProperty(const TSharedP
         return false;
     }
 
-    if (CastField<FStructProperty>(Property))
+    if (FStructProperty* StructProperty = CastField<FStructProperty>(Property))
     {
         const TSharedPtr<FJsonObject> Object = Value->AsObject();
         if (!Object.IsValid())
@@ -274,13 +389,90 @@ bool FPropertyAssignmentService::JsonValueToImportTextForProperty(const TSharedP
             OutError = FString::Printf(TEXT("Struct property '%s' requires an object value."), *Property->GetName());
             return false;
         }
-        return JsonObjectToStructImportText(Object, OutImportText, OutError);
+        return JsonObjectToStructImportText(Object, StructProperty, OutImportText, OutError);
+    }
+
+    if (FEnumProperty* EnumProperty = CastField<FEnumProperty>(Property))
+    {
+        if (Value->Type == EJson::Number)
+        {
+            OutImportText = FString::Printf(TEXT("%lld"), static_cast<int64>(Value->AsNumber()));
+            return true;
+        }
+        if (Value->Type == EJson::Object)
+        {
+            FString Name;
+            if (Value->AsObject()->TryGetStringField(TEXT("name"), Name) && !Name.IsEmpty())
+            {
+                OutImportText = Name;
+                return true;
+            }
+        }
+        OutImportText = Value->AsString();
+        return !OutImportText.IsEmpty() || EnumProperty->GetEnum() == nullptr;
+    }
+
+    if (FByteProperty* ByteProperty = CastField<FByteProperty>(Property))
+    {
+        if (ByteProperty->Enum)
+        {
+            if (Value->Type == EJson::Object)
+            {
+                FString Name;
+                if (Value->AsObject()->TryGetStringField(TEXT("name"), Name) && !Name.IsEmpty())
+                {
+                    OutImportText = Name;
+                    return true;
+                }
+            }
+            OutImportText = Value->AsString();
+            return !OutImportText.IsEmpty();
+        }
+    }
+
+    if (CastField<FClassProperty>(Property) || CastField<FObjectPropertyBase>(Property))
+    {
+        if (Value->Type == EJson::Null)
+        {
+            OutImportText = TEXT("None");
+            return true;
+        }
+        const FString ObjectPath = NormalizeObjectPath(Value->AsString());
+        OutImportText = ObjectPath.IsEmpty() ? TEXT("None") : ObjectPath;
+        return true;
+    }
+
+    if (CastField<FSoftObjectProperty>(Property) || CastField<FSoftClassProperty>(Property))
+    {
+        if (Value->Type == EJson::Null)
+        {
+            OutImportText = TEXT("None");
+            return true;
+        }
+        OutImportText = EscapeImportString(NormalizeObjectPath(Value->AsString()));
+        return true;
+    }
+
+    if (Property->GetClass() && Property->GetClass()->GetName().Contains(TEXT("FieldPath")))
+    {
+        if (Value->Type == EJson::Null)
+        {
+            OutImportText = TEXT("None");
+            return true;
+        }
+        const FString FieldPath = Value->AsString();
+        OutImportText = FieldPath.IsEmpty() ? TEXT("None") : FieldPath;
+        return true;
     }
 
     if (CastField<FNameProperty>(Property))
     {
         OutImportText = Value->AsString();
-        return !OutImportText.IsEmpty() || Value->Type == EJson::String;
+        if (OutImportText.IsEmpty())
+        {
+            OutImportText = TEXT("None");
+        }
+        return Value->Type == EJson::String;
     }
 
     if (CastField<FStrProperty>(Property))
@@ -311,45 +503,163 @@ bool FPropertyAssignmentService::JsonValueToImportTextForProperty(const TSharedP
     return false;
 }
 
-bool FPropertyAssignmentService::JsonObjectToStructImportText(const TSharedPtr<FJsonObject>& Object, FString& OutImportText, FString& OutError) const
+bool FPropertyAssignmentService::JsonObjectToStructImportText(const TSharedPtr<FJsonObject>& Object, FStructProperty* Property, FString& OutImportText, FString& OutError) const
 {
     if (!Object.IsValid())
     {
         OutError = TEXT("Struct value must be a JSON object.");
         return false;
     }
+    if (!Property || !Property->Struct)
+    {
+        OutError = TEXT("Struct property metadata is invalid.");
+        return false;
+    }
+    bool bTruncated = false;
+    if (Object->TryGetBoolField(TEXT("truncated"), bTruncated) && bTruncated)
+    {
+        OutError = FString::Printf(TEXT("Struct property '%s' was exported as truncated and cannot be safely imported."), *Property->GetName());
+        return false;
+    }
+    bool bSpecialHandled = false;
+    if (!TryBuildSpecialStructImportText(Object, Property, OutImportText, OutError, bSpecialHandled))
+    {
+        return false;
+    }
+    if (bSpecialHandled)
+    {
+        return true;
+    }
 
     TArray<FString> Fields;
-    for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Object->Values)
+    for (TFieldIterator<FProperty> It(Property->Struct); It; ++It)
     {
-        if (!Pair.Value.IsValid())
+        FProperty* InnerProperty = *It;
+        if (!InnerProperty)
+        {
+            continue;
+        }
+
+        const TSharedPtr<FJsonValue>* FieldValue = Object->Values.Find(InnerProperty->GetName());
+        if (!FieldValue || !FieldValue->IsValid())
         {
             continue;
         }
 
         FString ValueText;
-        if (Pair.Value->Type == EJson::String)
+        if (!JsonValueToImportTextForProperty(*FieldValue, InnerProperty, ValueText, OutError))
         {
-            ValueText = EscapeImportString(Pair.Value->AsString());
-        }
-        else if (Pair.Value->Type == EJson::Boolean)
-        {
-            ValueText = Pair.Value->AsBool() ? TEXT("True") : TEXT("False");
-        }
-        else if (Pair.Value->Type == EJson::Number)
-        {
-            ValueText = FString::SanitizeFloat(Pair.Value->AsNumber());
-        }
-        else
-        {
-            OutError = FString::Printf(TEXT("Struct field '%s' only supports scalar JSON values in Phase 2."), *Pair.Key);
+            OutError = FString::Printf(TEXT("Struct field '%s' is invalid: %s"), *InnerProperty->GetName(), *OutError);
             return false;
         }
 
-        Fields.Add(FString::Printf(TEXT("%s=%s"), *Pair.Key, *ValueText));
+        Fields.Add(FString::Printf(TEXT("%s=%s"), *InnerProperty->GetName(), *ValueText));
     }
 
     OutImportText = FString::Printf(TEXT("(%s)"), *FString::Join(Fields, TEXT(",")));
+    return true;
+}
+
+bool FPropertyAssignmentService::TryBuildSpecialStructImportText(
+    const TSharedPtr<FJsonObject>& Object,
+    FStructProperty* Property,
+    FString& OutImportText,
+    FString& OutError,
+    bool& bOutHandled) const
+{
+    bOutHandled = false;
+    if (!Object.IsValid() || !Property || !Property->Struct)
+    {
+        return true;
+    }
+
+    const FString StructName = Property->Struct->GetName();
+
+    if (StructName == TEXT("GameplayTag"))
+    {
+        bOutHandled = true;
+        TSharedPtr<FJsonValue> TagValue = MakeShared<FJsonValueObject>(Object);
+        return BuildGameplayTagImportTextFromValue(TagValue, OutImportText, OutError);
+    }
+
+    if (StructName == TEXT("GameplayTagContainer"))
+    {
+        bOutHandled = true;
+        const TArray<TSharedPtr<FJsonValue>>* Tags = nullptr;
+        if (!Object->TryGetArrayField(TEXT("GameplayTags"), Tags))
+        {
+            OutImportText = TEXT("(GameplayTags=())");
+            return true;
+        }
+
+        TArray<FString> TagTexts;
+        for (int32 Index = 0; Index < Tags->Num(); ++Index)
+        {
+            FString TagText;
+            if (!BuildGameplayTagImportTextFromValue((*Tags)[Index], TagText, OutError))
+            {
+                OutError = FString::Printf(TEXT("GameplayTagContainer tag %d is invalid: %s"), Index, *OutError);
+                return false;
+            }
+            TagTexts.Add(TagText);
+        }
+
+        OutImportText = FString::Printf(TEXT("(GameplayTags=(%s))"), *FString::Join(TagTexts, TEXT(",")));
+        return true;
+    }
+
+    if (StructName == TEXT("GameplayAttribute"))
+    {
+        bOutHandled = true;
+        const FString AttributeName = JsonStringOrNone(Object, TEXT("AttributeName"));
+        const FString Attribute = NormalizeImportPath(JsonStringOrNone(Object, TEXT("Attribute")));
+        const FString AttributeOwner = NormalizeImportPath(JsonStringOrNone(Object, TEXT("AttributeOwner")));
+        OutImportText = FString::Printf(TEXT("(AttributeName=\"%s\",Attribute=%s,AttributeOwner=%s)"),
+            *AttributeName,
+            *Attribute,
+            *AttributeOwner);
+        return true;
+    }
+
+    if (StructName == TEXT("DataTableRowHandle"))
+    {
+        bOutHandled = true;
+        const FString DataTable = NormalizeImportPath(JsonStringOrNone(Object, TEXT("DataTable")));
+        const FString RowName = JsonStringOrNone(Object, TEXT("RowName"));
+        OutImportText = FString::Printf(TEXT("(DataTable=%s,RowName=\"%s\")"), *DataTable, *RowName);
+        return true;
+    }
+
+    if (StructName == TEXT("ScalableFloat"))
+    {
+        bOutHandled = true;
+        const FString Value = JsonNumberOrDefault(Object, TEXT("Value"), TEXT("0"));
+        const FString bEnableMobile = JsonBoolOrDefault(Object, TEXT("bEnableMobile"), false);
+        const FString MobileValue = JsonNumberOrDefault(Object, TEXT("MobileValue"), TEXT("0"));
+
+        FString CurveText = TEXT("(DataTable=None,RowName=\"None\")");
+        const TSharedPtr<FJsonObject>* CurveObject = nullptr;
+        if (Object->TryGetObjectField(TEXT("Curve"), CurveObject) && CurveObject && CurveObject->IsValid())
+        {
+            FStructProperty* CurveProperty = CastField<FStructProperty>(Property->Struct->FindPropertyByName(TEXT("Curve")));
+            if (CurveProperty)
+            {
+                if (!JsonObjectToStructImportText(*CurveObject, CurveProperty, CurveText, OutError))
+                {
+                    OutError = FString::Printf(TEXT("ScalableFloat.Curve is invalid: %s"), *OutError);
+                    return false;
+                }
+            }
+        }
+
+        OutImportText = FString::Printf(TEXT("(Value=%s,bEnableMobile=%s,MobileValue=%s,Curve=%s)"),
+            *Value,
+            *bEnableMobile,
+            *MobileValue,
+            *CurveText);
+        return true;
+    }
+
     return true;
 }
 

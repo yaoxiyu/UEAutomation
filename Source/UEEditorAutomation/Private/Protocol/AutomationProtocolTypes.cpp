@@ -276,6 +276,79 @@ bool FAutomationProtocolJson::ParseRequest(const FString& JsonText, FAutomationT
         (*ReportObject)->TryGetStringField(TEXT("format"), OutRequest.ReportFormat);
     }
 
+    const TSharedPtr<FJsonObject>* AnalysisObject = nullptr;
+    if ((*PayloadObject)->TryGetObjectField(TEXT("analysis"), AnalysisObject) && AnalysisObject && AnalysisObject->IsValid())
+    {
+        FAutomationAnalysisOptions& Analysis = OutRequest.Analysis;
+        Analysis.bHasAnalysisBlock = true;
+        (*AnalysisObject)->TryGetBoolField(TEXT("force_refresh"), Analysis.bForceRefresh);
+        (*AnalysisObject)->TryGetBoolField(TEXT("use_cache"), Analysis.bUseCache);
+        (*AnalysisObject)->TryGetBoolField(TEXT("include_native_cxx"), Analysis.bIncludeNativeCxx);
+        (*AnalysisObject)->TryGetBoolField(TEXT("include_blueprint_snapshot"), Analysis.bIncludeBlueprintSnapshot);
+        (*AnalysisObject)->TryGetBoolField(TEXT("include_class_defaults"), Analysis.bIncludeClassDefaults);
+        (*AnalysisObject)->TryGetBoolField(TEXT("include_components"), Analysis.bIncludeComponents);
+        (*AnalysisObject)->TryGetBoolField(TEXT("include_references"), Analysis.bIncludeReferences);
+        (*AnalysisObject)->TryGetBoolField(TEXT("include_referencers"), Analysis.bIncludeReferencers);
+        (*AnalysisObject)->TryGetBoolField(TEXT("include_graph_summary"), Analysis.bIncludeGraphSummary);
+        (*AnalysisObject)->TryGetBoolField(TEXT("include_graph_pins"), Analysis.bIncludeGraphPins);
+        (*AnalysisObject)->TryGetBoolField(TEXT("export_only_editable_properties"), Analysis.bExportOnlyEditableProperties);
+
+        double NumberValue = 0.0;
+        if ((*AnalysisObject)->TryGetNumberField(TEXT("reference_depth"), NumberValue))
+        {
+            Analysis.ReferenceDepth = static_cast<int32>(NumberValue);
+        }
+        if ((*AnalysisObject)->TryGetNumberField(TEXT("max_nodes"), NumberValue))
+        {
+            Analysis.MaxNodes = static_cast<int32>(NumberValue);
+        }
+        if ((*AnalysisObject)->TryGetNumberField(TEXT("max_edges"), NumberValue))
+        {
+            Analysis.MaxEdges = static_cast<int32>(NumberValue);
+        }
+        if ((*AnalysisObject)->TryGetNumberField(TEXT("max_property_depth"), NumberValue))
+        {
+            Analysis.MaxPropertyDepth = static_cast<int32>(NumberValue);
+        }
+        if ((*AnalysisObject)->TryGetNumberField(TEXT("max_array_elements"), NumberValue))
+        {
+            Analysis.MaxArrayElements = static_cast<int32>(NumberValue);
+        }
+    }
+
+    // duplicate_asset / redirect_asset_references payload
+    (*PayloadObject)->TryGetStringField(TEXT("source_asset_path"), OutRequest.SourceAssetPath);
+    (*PayloadObject)->TryGetStringField(TEXT("destination_package_path"), OutRequest.DestinationPackagePath);
+    (*PayloadObject)->TryGetStringField(TEXT("destination_asset_name"), OutRequest.DestinationAssetName);
+    (*PayloadObject)->TryGetBoolField(TEXT("overwrite_destination"), OutRequest.bOverwriteDestination);
+
+    // list_directory_assets payload
+    (*PayloadObject)->TryGetStringField(TEXT("directory_path"), OutRequest.DirectoryPath);
+    if (!(*PayloadObject)->TryGetBoolField(TEXT("recursive"), OutRequest.bRecursive))
+    {
+        OutRequest.bRecursive = true;
+    }
+
+    const TArray<TSharedPtr<FJsonValue>>* RedirectsArray = nullptr;
+    if ((*PayloadObject)->TryGetArrayField(TEXT("redirects"), RedirectsArray))
+    {
+        for (const TSharedPtr<FJsonValue>& Value : *RedirectsArray)
+        {
+            const TSharedPtr<FJsonObject> Object = Value->AsObject();
+            if (!Object.IsValid())
+            {
+                continue;
+            }
+            FAutomationAssetRedirect Redirect;
+            Object->TryGetStringField(TEXT("from"), Redirect.From);
+            Object->TryGetStringField(TEXT("to"), Redirect.To);
+            if (!Redirect.From.IsEmpty() && !Redirect.To.IsEmpty())
+            {
+                OutRequest.AssetRedirects.Add(Redirect);
+            }
+        }
+    }
+
     return true;
 }
 
@@ -298,6 +371,19 @@ bool FAutomationProtocolJson::SerializeResult(const FAutomationTaskResult& Resul
         AssetOutputs.Add(MakeShared<FJsonValueObject>(Object));
     }
     Root->SetArrayField(TEXT("asset_outputs"), AssetOutputs);
+
+    TArray<TSharedPtr<FJsonValue>> Artifacts;
+    for (const FAutomationArtifactOutput& Artifact : Result.Artifacts)
+    {
+        const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
+        Object->SetStringField(TEXT("artifact_type"), Artifact.ArtifactType);
+        Object->SetStringField(TEXT("path"), Artifact.Path);
+        Object->SetStringField(TEXT("asset_path"), Artifact.AssetPath);
+        Object->SetStringField(TEXT("cache_status"), Artifact.CacheStatus);
+        Object->SetStringField(TEXT("parent_cpp_md5"), Artifact.ParentCppMd5);
+        Artifacts.Add(MakeShared<FJsonValueObject>(Object));
+    }
+    Root->SetArrayField(TEXT("artifacts"), Artifacts);
 
     TArray<TSharedPtr<FJsonValue>> Warnings;
     for (const FString& Warning : Result.Warnings)
@@ -325,6 +411,16 @@ bool FAutomationProtocolJson::SerializeResult(const FAutomationTaskResult& Resul
     Metrics->SetNumberField(TEXT("property_assign_count"), Result.Metrics.PropertyAssignCount);
     Metrics->SetNumberField(TEXT("warning_count"), Result.Metrics.WarningCount);
     Metrics->SetNumberField(TEXT("error_count"), Result.Metrics.ErrorCount);
+    Metrics->SetNumberField(TEXT("analysis_duration_ms"), Result.Metrics.AnalysisDurationMs);
+    Metrics->SetNumberField(TEXT("source_resolve_duration_ms"), Result.Metrics.SourceResolveDurationMs);
+    Metrics->SetNumberField(TEXT("reference_scan_duration_ms"), Result.Metrics.ReferenceScanDurationMs);
+    Metrics->SetNumberField(TEXT("cache_hit_count"), Result.Metrics.CacheHitCount);
+    Metrics->SetNumberField(TEXT("cache_miss_count"), Result.Metrics.CacheMissCount);
+    Metrics->SetNumberField(TEXT("analyzed_blueprint_count"), Result.Metrics.AnalyzedBlueprintCount);
+    Metrics->SetNumberField(TEXT("exported_property_count"), Result.Metrics.ExportedPropertyCount);
+    Metrics->SetNumberField(TEXT("reference_node_count"), Result.Metrics.ReferenceNodeCount);
+    Metrics->SetNumberField(TEXT("reference_edge_count"), Result.Metrics.ReferenceEdgeCount);
+    Metrics->SetBoolField(TEXT("reference_graph_truncated"), Result.Metrics.bReferenceGraphTruncated);
     Root->SetObjectField(TEXT("metrics"), Metrics);
     Root->SetStringField(TEXT("log_path"), Result.LogPath);
 

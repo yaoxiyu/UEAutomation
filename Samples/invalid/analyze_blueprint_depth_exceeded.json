@@ -1,0 +1,21 @@
+{
+  "protocol_version": 1,
+  "task_id": "sample_invalid_analyze_blueprint_depth_exceeded_001",
+  "task_type": "analyze_blueprint_reference_chain",
+  "timestamp_utc": "2026-04-28T09:00:00Z",
+  "payload": {
+    "target_asset": {
+      "asset_path": "/Game/Blueprints/AutoGen/BP_MetaTestRoot.BP_MetaTestRoot"
+    },
+    "analysis": {
+      "use_cache": true,
+      "reference_depth": 999,
+      "max_nodes": 999999,
+      "max_edges": 999999
+    }
+  },
+  "expected_error": {
+    "code": "InvalidAnalysisOptions",
+    "field": "payload.analysis"
+  }
+}

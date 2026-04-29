@@ -19,6 +19,18 @@ struct FAutomationMetrics
     int32 PropertyAssignCount = 0;
     int32 WarningCount = 0;
     int32 ErrorCount = 0;
+
+    // Phase 4 analysis-only fields. Default to 0 for non-analysis tasks.
+    int64 AnalysisDurationMs = 0;
+    int64 SourceResolveDurationMs = 0;
+    int64 ReferenceScanDurationMs = 0;
+    int32 CacheHitCount = 0;
+    int32 CacheMissCount = 0;
+    int32 AnalyzedBlueprintCount = 0;
+    int32 ExportedPropertyCount = 0;
+    int32 ReferenceNodeCount = 0;
+    int32 ReferenceEdgeCount = 0;
+    bool bReferenceGraphTruncated = false;
 };
 
 struct FAutomationPropertyValue
@@ -95,6 +107,33 @@ struct FAutomationOperation
     TArray<FAutomationPropertyValue> Properties;
 };
 
+struct FAutomationAnalysisOptions
+{
+    bool bHasAnalysisBlock = false;
+    bool bForceRefresh = false;
+    bool bUseCache = true;
+    bool bIncludeNativeCxx = true;
+    bool bIncludeBlueprintSnapshot = true;
+    bool bIncludeClassDefaults = true;
+    bool bIncludeComponents = true;
+    bool bIncludeReferences = true;
+    bool bIncludeReferencers = true;
+    bool bIncludeGraphSummary = true;
+    bool bIncludeGraphPins = false;
+    bool bExportOnlyEditableProperties = true;
+    int32 ReferenceDepth = 1;
+    int32 MaxNodes = 128;
+    int32 MaxEdges = 512;
+    int32 MaxPropertyDepth = 8;
+    int32 MaxArrayElements = 128;
+};
+
+struct FAutomationAssetRedirect
+{
+    FString From;
+    FString To;
+};
+
 struct FAutomationTaskRequest
 {
     int32 ProtocolVersion = 0;
@@ -120,6 +159,18 @@ struct FAutomationTaskRequest
     FString ReportFormat;
     FString SourcePath;
     FString TaskFilePath;
+    FAutomationAnalysisOptions Analysis;
+
+    // duplicate_asset / redirect_asset_references payload
+    FString SourceAssetPath;
+    FString DestinationPackagePath;
+    FString DestinationAssetName;
+    bool bOverwriteDestination = false;
+    TArray<FAutomationAssetRedirect> AssetRedirects;
+
+    // list_directory_assets payload
+    FString DirectoryPath;
+    bool bRecursive = true;
 };
 
 struct FAutomationAssetOutput
@@ -127,6 +178,15 @@ struct FAutomationAssetOutput
     FString AssetPath;
     FString AssetName;
     FString AssetType;
+};
+
+struct FAutomationArtifactOutput
+{
+    FString ArtifactType;
+    FString Path;
+    FString AssetPath;
+    FString CacheStatus;
+    FString ParentCppMd5;
 };
 
 struct FAutomationTaskResult
@@ -137,6 +197,7 @@ struct FAutomationTaskResult
     bool bSuccess = false;
     FString Status = TEXT("failed");
     TArray<FAutomationAssetOutput> AssetOutputs;
+    TArray<FAutomationArtifactOutput> Artifacts;
     TArray<FString> Warnings;
     TArray<FAutomationError> Errors;
     TArray<FString> LogLines;

@@ -18,4 +18,6 @@ public:
 
 private:
     class USCS_Node* FindSCSNode(class UBlueprint* Blueprint, const FString& ComponentName) const;
+    class USCS_Node* FindSCSNodeInHierarchy(class UBlueprint* Blueprint, const FString& ComponentName) const;
+    UObject* FindNativeComponentTemplate(class UBlueprint* Blueprint, const FString& ComponentName) const;
 };

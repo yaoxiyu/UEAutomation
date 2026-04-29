@@ -1,0 +1,25 @@
+{
+  "protocol_version": 1,
+  "task_id": "sample_export_blueprint_ai_context_001",
+  "task_type": "export_blueprint_ai_context",
+  "timestamp_utc": "2026-04-28T09:00:00Z",
+  "execution": {
+    "priority": "normal"
+  },
+  "payload": {
+    "target_asset": {
+      "asset_path": "/Game/Blueprints/AutoGen/BP_MetaTestRoot.BP_MetaTestRoot"
+    },
+    "analysis": {
+      "use_cache": true,
+      "include_native_cxx": true,
+      "include_blueprint_snapshot": true,
+      "include_references": true,
+      "include_referencers": true,
+      "include_graph_summary": true,
+      "reference_depth": 1,
+      "max_nodes": 32,
+      "max_edges": 128
+    }
+  }
+}

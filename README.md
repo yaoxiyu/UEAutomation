@@ -1,190 +1,56 @@
 # UEEditorAutomation
 
-UE Editor C++ plugin for declarative Blueprint asset automation.
+UE Editor C++ 插件，用于声明式资产自动化：蓝图、DataAsset、材质、
+曲线、GAS、审计、只读蓝图分析、资产复制、引用重写。
 
-## Current Status
+## 文档
 
-For the real local implementation state of Phase 1 and Phase 2, read:
+- `Docs/Current_Truth.md` —— 实现的能力以及它怎么工作
+- `Docs/Task_Interface.md` —— JSON 任务协议与每个 task 的字段
+- `Docs/Tech_Debt.md` —— 已知限制与待重构点
+- `Docs/CI_Integration.md` —— 辅助脚本说明
 
-```text
-Docs/Current_Implementation_Status.md
+## 默认任务目录
+
 ```
-
-That document is the fast orientation entry point for future AI agents. It separates what is implemented and validated from broader design goals.
-
-## Phase 1 Scope
-
-- File polling daemon
-- `create_blueprint`
-- `modify_blueprint_components`
-- `modify_blueprint_defaults`
-- Blueprint component tree assembly
-- Component template property assignment
-- Blueprint class default assignment
-- Compile / save / open
-- Structured `*.result.json`
-
-Graph node generation, pin wiring, UI automation, socket/http transport, and broad reflection writes are intentionally out of scope.
-
-## Phase 2 Template Scope
-
-The first Phase 2 slice adds template-driven Blueprint creation:
-
-- `create_blueprint_from_template`
-- `batch_create_blueprints`
-- Runtime template registry JSON
-- Component property / transform overrides
-- Class default overrides
-- Controlled `array` and JSON-object `struct` property imports
-- Debug panel MVP for recent result/log inspection
-
-Template tasks expand to the same domain service path as `create_blueprint`, so compile, save, open, whitelist, property assignment, and result output behavior stays consistent.
-
-## Default Task Directories
-
-```text
 C:/UEAutomation/
-  tasks/
-    inbox/
-    working/
-    done/
-    failed/
+  tasks/{inbox, working, done, failed}/
   results/
   logs/
 ```
 
-Drop a task JSON file into `tasks/inbox`. The plugin moves it to `working`, executes it on the editor ticker, writes `results/<task_id>.result.json`, then moves the task to `done` or `failed`.
+把 JSON 任务文件丢到 `tasks/inbox`。插件会移到 `working`，写
+`results/<task_id>.result.json`，再把任务移到 `done` 或 `failed`。
 
-## Samples
+## 样例
 
-Sample tasks are split by expected outcome:
-
-```text
-Samples/valid/
-Samples/invalid/
+```
+Samples/valid/      预期成功的任务
+Samples/invalid/    预期返回结构化错误的任务
 ```
 
-Use the invalid samples to verify structured error output after changing whitelist policy or task parsing.
+## 配置
 
-`Samples/valid/create_blueprint_skip_if_exists.json` verifies create idempotency for an existing `BP_AutoActor`.
+`UEditorAutomationSettings`（项目设置）暴露：daemon 开关、轮询间隔、
+路径、协议版本、白名单文件、模板文件、Phase 4 分析上限。
 
-## Configuration
+运行时策略：
 
-Project settings are exposed by `UEditorAutomationSettings`:
-
-- `bEnableDaemon`
-- task/result/log directories
-- `PollIntervalSeconds`
-- `SupportedProtocolVersion`
-- `WhitelistFilePath`
-
-Security policy is loaded at runtime from:
-
-```text
+```
 Plugins/UEEditorAutomation/Config/UEEditorAutomationWhitelist.json
-```
-
-The whitelist file controls:
-
-- allowed task types
-- allowed asset roots
-- allowed parent classes
-- allowed component classes
-- allowed property names
-
-Edit the JSON whitelist instead of recompiling C++ when broadening automation scope.
-
-Blueprint templates are loaded at runtime from:
-
-```text
 Plugins/UEEditorAutomation/Config/UEEditorAutomationTemplates.json
 ```
 
-Template registry entries define a stable component tree and optional class defaults. Task payload overrides may replace component properties, component transform fields, and class defaults by property name.
+白名单中字段为空数组表示"不限制" —— 调宽自动化范围请改 JSON，
+不要重新编译 C++。
 
-The Phase 2 property expansion intentionally stays bounded: `array` is accepted only when the target UE property is an array, and `struct` is accepted only when the target UE property is a struct and the JSON value is an object with scalar fields.
+## 集成
 
-## Phase 3 Extension Scope
+把 `Plugins/UEEditorAutomation` 拷到 UE 项目并重新生成项目文件。
+模块是 editor-only，加载阶段为 `PostEngineInit`。引擎版本敏感的代码
+集中在：
 
-The first Phase 3 slice adds platform-extension MVPs:
-
-- `create_data_asset`
-- `modify_asset_properties`
-- `create_material_instance`
-- `modify_material_instance`
-- `create_blueprint_class`
-- `create_widget_blueprint`
-- `create_data_table`
-- `create_curve_float`
-- `create_curve_vector`
-- `create_animation_blueprint`
-- `create_blend_space`
-- `create_level_sequence`
-- `create_physics_asset`
-- `create_material_function`
-- `create_gameplay_ability`
-- `create_gameplay_effect`
-- `import_texture`
-- `import_sound_wave`
-- `check_asset_rules`
-- `generate_audit_report`
-- explicit `Window -> UE Automation` debug panel menu entry
-- controlled `set` and `map` property import paths
-- optional trusted-localhost socket task server
-- CI helper scripts for file and socket submission
-
-Phase 3 validation notes live in:
-
-```text
-Docs/Phase3_Extension_Checklist.md
 ```
-
-CI helper script notes live in:
-
-```text
-Docs/CI_Integration.md
-```
-
-Task interface and payload usage are documented in:
-
-```text
-Docs/Task_Interface_Usage.md
-```
-
-## Integration
-
-Copy `Plugins/UEEditorAutomation` into a UE project and regenerate project files. The module is editor-only and loads at `PostEngineInit`.
-
-For UE4.25, validate compiler details around `UPackage::SavePackage`, `USimpleConstructionScript`, and ticker APIs in your exact engine fork. UE version-specific API usage is concentrated in:
-
-```text
 Source/UEEditorAutomation/Private/Adapter/UEBlueprintEditorAdapter.cpp
 Source/UEEditorAutomation/Private/UEEditorAutomationModule.cpp
-```
-
-## Result Contract
-
-Results are machine-readable:
-
-```json
-{
-  "protocol_version": 1,
-  "task_id": "task_create_bp_001",
-  "task_type": "create_blueprint",
-  "success": true,
-  "status": "succeeded",
-  "asset_outputs": [],
-  "warnings": [],
-  "errors": [],
-  "metrics": {
-    "duration_ms": 0,
-    "compile_duration_ms": 0,
-    "save_duration_ms": 0,
-    "component_create_count": 0,
-    "property_assign_count": 0,
-    "warning_count": 0,
-    "error_count": 0
-  },
-  "log_path": ""
-}
 ```

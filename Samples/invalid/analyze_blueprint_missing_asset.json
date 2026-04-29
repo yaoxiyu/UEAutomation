@@ -1,0 +1,19 @@
+{
+  "protocol_version": 1,
+  "task_id": "sample_invalid_analyze_blueprint_missing_asset_001",
+  "task_type": "analyze_blueprint",
+  "timestamp_utc": "2026-04-28T09:00:00Z",
+  "payload": {
+    "target_asset": {
+      "asset_path": "/Game/Blueprints/AutoGen/BP_NotExists.BP_NotExists"
+    },
+    "analysis": {
+      "force_refresh": false,
+      "use_cache": true
+    }
+  },
+  "expected_error": {
+    "code": "AnalysisAssetNotFound",
+    "field": "payload.target_asset.asset_path"
+  }
+}

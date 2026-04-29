@@ -1,8 +1,12 @@
 #include "Application/BlueprintTaskExecutors.h"
 #include "Application/AssetTaskExecutors.h"
+#include "Application/AssetDuplicationTaskExecutors.h"
+#include "Application/BlueprintAnalysisTaskExecutors.h"
 #include "Application/EditorAutomationApplicationService.h"
 #include "Adapter/UEBlueprintEditorAdapter.h"
 #include "Core/AutomationLog.h"
+#include "Domain/AssetDuplicationService.h"
+#include "Domain/BlueprintAnalysisService.h"
 #include "Framework/Docking/TabManager.h"
 #include "Framework/MultiBox/MultiBoxBuilder.h"
 #include "LevelEditor.h"
@@ -55,6 +59,18 @@ public:
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FImportAssetTaskExecutor>(AssetService, TEXT("import_sound_wave")));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCheckAssetRulesTaskExecutor>(AssetService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FGenerateAuditReportTaskExecutor>(AssetService));
+
+        TSharedRef<FBlueprintAnalysisService> AnalysisService = MakeShared<FBlueprintAnalysisService>();
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FAnalyzeBlueprintTaskExecutor>(AnalysisService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FAnalyzeBlueprintReferenceChainTaskExecutor>(AnalysisService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FRefreshBlueprintMetaCacheTaskExecutor>(AnalysisService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FExportBlueprintAIContextTaskExecutor>(AnalysisService));
+
+        TSharedRef<FAssetDuplicationService> DuplicationService = MakeShared<FAssetDuplicationService>();
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FDuplicateAssetTaskExecutor>(DuplicationService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FRedirectAssetReferencesTaskExecutor>(DuplicationService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FListDirectoryAssetsTaskExecutor>(DuplicationService));
+
         ApplicationService->Initialize();
 
         SocketTaskServer = MakeShared<FSocketTaskServer>();

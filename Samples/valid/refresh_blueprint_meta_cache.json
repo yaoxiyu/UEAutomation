@@ -1,0 +1,31 @@
+{
+  "protocol_version": 1,
+  "task_id": "sample_refresh_blueprint_meta_cache_001",
+  "task_type": "refresh_blueprint_meta_cache",
+  "timestamp_utc": "2026-04-28T09:00:00Z",
+  "execution": {
+    "priority": "normal",
+    "save_after_success": false,
+    "open_after_success": false
+  },
+  "payload": {
+    "target_assets": [
+      {
+        "asset_path": "/Game/Blueprints/AutoGen/BP_MetaTestRoot.BP_MetaTestRoot"
+      },
+      {
+        "asset_path": "/Game/Blueprints/AutoGen/BP_MetaProjectile.BP_MetaProjectile"
+      }
+    ],
+    "analysis": {
+      "force_refresh": true,
+      "use_cache": false,
+      "include_native_cxx": true,
+      "include_blueprint_snapshot": true,
+      "include_references": true,
+      "include_referencers": false,
+      "include_graph_summary": true,
+      "reference_depth": 0
+    }
+  }
+}

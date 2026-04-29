@@ -20,6 +20,7 @@
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SCS_Node.h"
 #include "Subsystems/AssetEditorSubsystem.h"
+#include "UObject/UnrealType.h"
 
 UBlueprint* FUEBlueprintEditorAdapter::CreateBlueprintAsset(const FString& PackagePath, const FString& AssetName, UClass* ParentClass, FString& OutError)
 {
@@ -65,6 +66,13 @@ UBlueprint* FUEBlueprintEditorAdapter::LoadBlueprintAsset(const FString& AssetPa
     if (!Blueprint)
     {
         OutError = FString::Printf(TEXT("Blueprint asset '%s' not found."), *AssetPath);
+        return nullptr;
+    }
+    // SavePackage rejects partially loaded packages. Force a full load so any
+    // subsequent modify/save operation sees the entire package graph.
+    if (UPackage* Package = Blueprint->GetOutermost())
+    {
+        Package->FullyLoad();
     }
     return Blueprint;
 }
@@ -144,9 +152,15 @@ bool FUEBlueprintEditorAdapter::RemoveComponentNode(UBlueprint* Blueprint, const
 
 UObject* FUEBlueprintEditorAdapter::GetComponentTemplate(UBlueprint* Blueprint, const FString& ComponentName, FString& OutError)
 {
-    USCS_Node* Node = FindSCSNode(Blueprint, ComponentName);
+    USCS_Node* Node = FindSCSNodeInHierarchy(Blueprint, ComponentName);
     if (!Node)
     {
+        UObject* NativeTemplate = FindNativeComponentTemplate(Blueprint, ComponentName);
+        if (NativeTemplate)
+        {
+            return NativeTemplate;
+        }
+
         OutError = FString::Printf(TEXT("Component '%s' not found."), *ComponentName);
         return nullptr;
     }
@@ -249,6 +263,43 @@ bool FUEBlueprintEditorAdapter::OpenAsset(UObject* Asset, FString& OutError)
     return GEditor->GetEditorSubsystem<UAssetEditorSubsystem>()->OpenEditorForAsset(Asset);
 }
 
+UObject* FUEBlueprintEditorAdapter::FindNativeComponentTemplate(UBlueprint* Blueprint, const FString& ComponentName) const
+{
+    if (!Blueprint || !Blueprint->GeneratedClass)
+    {
+        return nullptr;
+    }
+
+    UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
+    if (!CDO)
+    {
+        return nullptr;
+    }
+
+    for (TFieldIterator<FObjectPropertyBase> It(CDO->GetClass(), EFieldIteratorFlags::IncludeSuper); It; ++It)
+    {
+        FObjectPropertyBase* Property = *It;
+        if (!Property || !Property->PropertyClass || !Property->PropertyClass->IsChildOf(UActorComponent::StaticClass()))
+        {
+            continue;
+        }
+
+        UObject* Value = Property->GetObjectPropertyValue_InContainer(CDO);
+        if (!Value)
+        {
+            continue;
+        }
+
+        if (Property->GetName().Equals(ComponentName, ESearchCase::IgnoreCase)
+            || Value->GetName().Equals(ComponentName, ESearchCase::IgnoreCase))
+        {
+            return Value;
+        }
+    }
+
+    return nullptr;
+}
+
 USCS_Node* FUEBlueprintEditorAdapter::FindSCSNode(UBlueprint* Blueprint, const FString& ComponentName) const
 {
     if (!Blueprint || !Blueprint->SimpleConstructionScript)
@@ -263,6 +314,22 @@ USCS_Node* FUEBlueprintEditorAdapter::FindSCSNode(UBlueprint* Blueprint, const F
         {
             return Node;
         }
+    }
+    return nullptr;
+}
+
+USCS_Node* FUEBlueprintEditorAdapter::FindSCSNodeInHierarchy(UBlueprint* Blueprint, const FString& ComponentName) const
+{
+    UBlueprint* Cursor = Blueprint;
+    while (Cursor)
+    {
+        if (USCS_Node* Node = FindSCSNode(Cursor, ComponentName))
+        {
+            return Node;
+        }
+
+        UClass* ParentClass = Cursor->ParentClass;
+        Cursor = ParentClass ? Cast<UBlueprint>(ParentClass->ClassGeneratedBy) : nullptr;
     }
     return nullptr;
 }

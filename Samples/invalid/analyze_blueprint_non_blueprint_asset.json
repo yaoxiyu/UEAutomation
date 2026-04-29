@@ -1,0 +1,19 @@
+{
+  "protocol_version": 1,
+  "task_id": "sample_invalid_analyze_blueprint_non_blueprint_asset_001",
+  "task_type": "analyze_blueprint",
+  "timestamp_utc": "2026-04-28T09:00:00Z",
+  "payload": {
+    "target_asset": {
+      "asset_path": "/Engine/EngineMaterials/DefaultMaterial.DefaultMaterial"
+    },
+    "analysis": {
+      "force_refresh": false,
+      "use_cache": true
+    }
+  },
+  "expected_error": {
+    "code": "AnalysisAssetNotBlueprint",
+    "field": "payload.target_asset.asset_path"
+  }
+}
