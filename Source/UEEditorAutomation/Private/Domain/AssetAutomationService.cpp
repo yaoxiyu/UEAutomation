@@ -18,7 +18,17 @@
 #include "Engine/Texture.h"
 #include "Engine/SkeletalMesh.h"
 #include "PhysicsEngine/PhysicsAsset.h"
+
+#if __has_include("PhysicsAssetUtils.h")
+#define UE_EDITOR_AUTOMATION_HAS_PHYSICS_ASSET_UTILS 1
 #include "PhysicsAssetUtils.h"
+#elif __has_include("PhysicsEngine/PhysicsAssetUtils.h")
+#define UE_EDITOR_AUTOMATION_HAS_PHYSICS_ASSET_UTILS 1
+#include "PhysicsEngine/PhysicsAssetUtils.h"
+#else
+#define UE_EDITOR_AUTOMATION_HAS_PHYSICS_ASSET_UTILS 0
+#endif
+
 #include "UObject/Class.h"
 #include "UObject/Package.h"
 #include "UObject/UnrealType.h"
@@ -539,6 +549,7 @@ bool FAssetAutomationService::BuildFactoryAssetSpec(const FAutomationTaskRequest
 
 bool FAssetAutomationService::CreatePhysicsAsset(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) const
 {
+#if UE_EDITOR_AUTOMATION_HAS_PHYSICS_ASSET_UTILS
     const FString TargetSkeletalMesh = GetParameterString(Request, TEXT("target_skeletal_mesh"));
     if (Request.Asset.AssetName.IsEmpty() || Request.Asset.PackagePath.IsEmpty() || TargetSkeletalMesh.IsEmpty())
     {
@@ -605,6 +616,14 @@ bool FAssetAutomationService::CreatePhysicsAsset(const FAutomationTaskRequest& R
 
     AddAssetOutput(Request.Asset, TEXT("physics_asset"), OutResult);
     return true;
+#else
+    (void)Request;
+    OutResult.AddError(
+        TEXT("UnsupportedEngineFeature"),
+        TEXT("create_physics_asset requires PhysicsAssetUtils, which is not available in this engine build."),
+        TEXT("task_type"));
+    return false;
+#endif
 }
 
 bool FAssetAutomationService::CreateAssetWithFactory(const FAutomationTaskRequest& Request, const FFactoryAssetSpec& Spec, FAutomationTaskResult& OutResult) const

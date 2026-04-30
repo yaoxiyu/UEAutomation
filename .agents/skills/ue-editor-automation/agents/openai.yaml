@@ -1,0 +1,7 @@
+interface:
+  display_name: "UE Editor Automation"
+  short_description: "Automate UE blueprint and asset workflows"
+  default_prompt: "Use $ue-editor-automation to analyze or modify an Unreal blueprint safely."
+
+policy:
+  allow_implicit_invocation: true

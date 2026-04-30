@@ -297,8 +297,8 @@ Validation:
 适用：
 
 ```text
-参考 /Game/.../Yugiri/Q，在同级 CopyQ 中用创建方式复刻蓝图。
-参考 /Game/.../Yugiri/X，在同级 CopyX 中用创建方式复刻蓝图。
+参考 /Game/Example/SourceFeature，在 /Game/Example/TargetFeature 中用创建方式复刻蓝图。
+参考 /Game/Example/SourceAbility，在 /Game/Example/TargetAbility 中用创建方式复刻蓝图。
 要求命名、引用关系、配置值一致，但不能 duplicate 蓝图。
 ```
 

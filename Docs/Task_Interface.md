@@ -133,7 +133,7 @@ UPROPERTY 组件也能用同样的名字访问。
 ```json
 {
   "op": "update_component_properties",
-  "component_name": "CySceneMapYugiriX",
+  "component_name": "ExampleSceneMapComponent",
   "target_kind": "scs_inherited_override",
   "properties": [
     { "name": "VisionSwitch", "type": "import_text", "value": "(bVisibleToCustom=True)" }
@@ -424,7 +424,7 @@ Asset Registry 目录枚举。artifact 写到
 {
   "task_type": "list_directory_assets",
   "payload": {
-    "directory_path": "/Game/PaperMan/CyAbilities/Yugiri/Q",
+    "directory_path": "/Game/Example/SourceFeature",
     "recursive": true
   }
 }
@@ -439,7 +439,7 @@ Asset Registry 目录枚举。artifact 写到
 {
   "task_type": "delete_directory_assets",
   "payload": {
-    "directory_path": "/Game/PaperMan/CyAbilities/Yugiri/CopyQ",
+    "directory_path": "/Game/Example/TargetFeature",
     "recursive": true
   }
 }

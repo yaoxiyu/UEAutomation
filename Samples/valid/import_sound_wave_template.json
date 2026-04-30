@@ -10,7 +10,7 @@
     "save_after_success": true
   },
   "payload": {
-    "source_path": "D:/ReplaceWithSound.wav",
+    "source_path": "<ABSOLUTE_PATH_TO_SOUND_WAV>",
     "asset": {
       "asset_type": "sound_wave",
       "asset_name": "S_AutomationBasic_001",

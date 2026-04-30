@@ -21,7 +21,11 @@
 #include "UObject/SavePackage.h"
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SCS_Node.h"
+#if ENGINE_MAJOR_VERSION >= 5
 #include "Subsystems/AssetEditorSubsystem.h"
+#else
+#include "AssetEditorManager.h"
+#endif
 #include "UObject/UnrealType.h"
 
 UBlueprint* FUEBlueprintEditorAdapter::CreateBlueprintAsset(const FString& PackagePath, const FString& AssetName, UClass* ParentClass, FString& OutError)
@@ -343,7 +347,12 @@ bool FUEBlueprintEditorAdapter::OpenAsset(UObject* Asset, FString& OutError)
         OutError = TEXT("Asset or GEditor is invalid.");
         return false;
     }
+#if ENGINE_MAJOR_VERSION >= 5
     return GEditor->GetEditorSubsystem<UAssetEditorSubsystem>()->OpenEditorForAsset(Asset);
+#else
+    FAssetEditorManager::Get().OpenEditorForAsset(Asset);
+    return true;
+#endif
 }
 
 UObject* FUEBlueprintEditorAdapter::FindNativeComponentTemplate(UBlueprint* Blueprint, const FString& ComponentName) const

@@ -9,18 +9,18 @@
     "open_after_success": false
   },
   "payload": {
-    "source_asset_path": "/Game/PaperMan/CyAbilities/Yugiri/Q/Weapon/Weapon_Q_Yugiri.Weapon_Q_Yugiri",
+    "source_asset_path": "/Game/Example/SourceFeature/Weapon/Weapon_Example.Weapon_Example",
     "target_asset": {
-      "asset_path": "/Game/PaperMan/CyAbilities/Yugiri/CopyQ/Weapon/Weapon_Q_Yugiri.Weapon_Q_Yugiri"
+      "asset_path": "/Game/Example/TargetFeature/Weapon/Weapon_Example.Weapon_Example"
     },
     "redirects": [
       {
-        "from": "/Game/PaperMan/CyAbilities/Yugiri/Q/Weapon/Weapon_Q_Yugiri.Weapon_Q_Yugiri",
-        "to": "/Game/PaperMan/CyAbilities/Yugiri/CopyQ/Weapon/Weapon_Q_Yugiri.Weapon_Q_Yugiri"
+        "from": "/Game/Example/SourceFeature/Weapon/Weapon_Example.Weapon_Example",
+        "to": "/Game/Example/TargetFeature/Weapon/Weapon_Example.Weapon_Example"
       },
       {
-        "from": "/Game/PaperMan/CyAbilities/Yugiri/Q/Weapon/Weapon_Q_Yugiri.Weapon_Q_Yugiri_C",
-        "to": "/Game/PaperMan/CyAbilities/Yugiri/CopyQ/Weapon/Weapon_Q_Yugiri.Weapon_Q_Yugiri_C"
+        "from": "/Game/Example/SourceFeature/Weapon/Weapon_Example.Weapon_Example_C",
+        "to": "/Game/Example/TargetFeature/Weapon/Weapon_Example.Weapon_Example_C"
       }
     ]
   }

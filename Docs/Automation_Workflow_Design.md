@@ -285,7 +285,7 @@ compile_blueprint
     "target_asset": {
       "asset_path": "/Game/.../Child.Child"
     },
-    "component_name": "CySceneMapYugiriX",
+    "component_name": "ExampleSceneMapComponent",
     "target_kind": "scs_inherited_override",
     "properties": []
   }
@@ -427,7 +427,7 @@ Orchestration 可以用 JS、PowerShell、Python、直接 JSON 任务文件或 s
   "skipped": false,
   "field_results": [
     {
-      "path": "Component.CySceneMapYugiriX.VisionSwitch",
+      "path": "Component.ExampleSceneMapComponent.VisionSwitch",
       "status": "written | skipped | failed",
       "write_target": "scs_inherited_override",
       "write_mode": "import_text",
@@ -725,12 +725,12 @@ repair_plan.json
 
 ```json
 {
-  "workflow_id": "yugiri_copyx_001",
+  "workflow_id": "example_copy_feature_001",
   "template_id": "asset.semantic_reconstruct",
-  "goal": "Replicate /Yugiri/X to /Yugiri/CopyX",
+  "goal": "Replicate /Game/Example/SourceFeature to /Game/Example/TargetFeature",
   "inputs": {
-    "source_root": "/Game/PaperMan/CyAbilities/Yugiri/X",
-    "target_root": "/Game/PaperMan/CyAbilities/Yugiri/CopyX"
+    "source_root": "/Game/Example/SourceFeature",
+    "target_root": "/Game/Example/TargetFeature"
   },
   "assumptions": [],
   "phases": [
@@ -747,7 +747,7 @@ repair_plan.json
           "id": "C2-Preview-CySceneMap",
           "action": "update_component_properties",
           "target_asset": "/Game/.../Preview.Preview",
-          "component_name": "CySceneMapYugiriPreviewX",
+          "component_name": "ExamplePreviewSceneMapComponent",
           "target_kind": "scs_inherited_override",
           "reason": "source property differs from direct parent",
           "properties": []

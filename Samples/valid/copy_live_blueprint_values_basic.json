@@ -8,9 +8,9 @@
     "open_after_success": false
   },
   "payload": {
-    "source_asset_path": "/Game/PaperMan/CyAbilities/Yugiri/Q/BP_DamageType_Q_Yugiri.BP_DamageType_Q_Yugiri",
+    "source_asset_path": "/Game/Example/SourceFeature/BP_DamageType_Example.BP_DamageType_Example",
     "target_asset": {
-      "asset_path": "/Game/PaperMan/CyAbilities/Yugiri/CopyQ/BP_DamageType_Q_Yugiri.BP_DamageType_Q_Yugiri"
+      "asset_path": "/Game/Example/TargetFeature/BP_DamageType_Example.BP_DamageType_Example"
     },
     "class_defaults": [
       {

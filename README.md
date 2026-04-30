@@ -5,10 +5,14 @@ UE Editor C++ 插件，用于声明式资产自动化：蓝图、DataAsset、材
 
 ## 文档
 
-- `Docs/Current_Truth.md` —— 实现的能力以及它怎么工作
+项目内置 `.agents/skills/ue-editor-automation/`，AI 遇到“分析蓝图 / 创建蓝图 /
+修改蓝图 / 排查蓝图或资产 bug / 复制资产 / 重写引用”等请求时优先按该 skill
+调用本工具；不需要先阅读 Quickstart。其余文档按职责拆分：
+
+- `Docs/Current_Truth.md` —— 当前真实能力、限制与实现行为
 - `Docs/Task_Interface.md` —— JSON 任务协议与每个 task 的字段
-- `Docs/Automation_Workflow_Design.md` —— C++ 原子能力、AI 编排层与工作流模板设计
-- `Docs/AI_Workflow_Quickstart.md` —— 新 AI 会话只读这一份即可按工作流方式开始
+- `Docs/Automation_Workflow_Design.md` —— 原子能力、AI 编排层与工作流模板设计
+- `Docs/AI_Workflow_Quickstart.md` —— 详细工作流说明；当 skill 信息不足时再阅读
 - `Docs/Tech_Debt.md` —— 已知限制与待重构点
 - `Docs/CI_Integration.md` —— 辅助脚本说明
 

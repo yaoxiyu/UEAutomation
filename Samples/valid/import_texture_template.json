@@ -10,7 +10,7 @@
     "save_after_success": true
   },
   "payload": {
-    "source_path": "D:/ReplaceWithTexture.png",
+    "source_path": "<ABSOLUTE_PATH_TO_TEXTURE_PNG>",
     "asset": {
       "asset_type": "texture",
       "asset_name": "T_AutomationBasic_001",
