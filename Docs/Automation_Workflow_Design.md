@@ -576,8 +576,32 @@ Verify:
 
 ```text
 target_blueprints
+analysis_depth: quick | standard | deep | audit
 analysis_focus: performance | networking | safety | gameplay | all
 reference_context optional
+```
+
+开始要求：
+
+```text
+任何蓝图功能分析任务，开始时必须确认 analysis_depth，不能由 AI 自行
+静默选择深度。
+
+depth 定义：
+  quick:
+    资产职责、关键链路、明显风险。
+  standard:
+    父类 C++ 语义、组件结构、非默认值、引用链、主要性能/网络/
+    生命周期风险。
+  deep:
+    在 standard 基础上，展开主要 graph summary/pins、逐 Atom / GE /
+    Detector 配置含义、核心状态机、风险矩阵。
+  audit:
+    在 deep 基础上，必须重新执行 live 只读 Observe，导出 graph pins、
+    组件、CDO、引用图，并输出逐资产逐字段证据表。
+
+如果用户已明确说“详细/全面/审计/逐资产/暴露潜在问题”，可推断为
+deep 或 audit，但报告开头必须说明采用深度、推断原因和证据边界。
 ```
 
 阶段：
@@ -588,21 +612,78 @@ Observe:
   export graph summary/pins as needed
   snapshot native parent C++ context
   export reference graph
+  snapshot component hierarchy
+  snapshot class defaults and component defaults
+  collect direct dependencies and referencers
 
 Analyze:
+  for each blueprint, create a structured analysis item:
+    asset path
+    parent class
+    native C++ header/cpp path
+    parent C++ responsibility
+    key parent C++ execution functions
+    blueprint runtime role
+    own / inherited / native components
+    non-default CDO fields
+    non-default component fields
+    references and referencers
+
+  inspect parent C++ code:
+    lifecycle entry points
+    authority/client behavior
+    tick/timer/async/latent behavior
+    replication/prediction/input handling
+    important virtual or Blueprint event hooks
+    expected subclass responsibilities
+
+  inspect blueprint-added components:
+    component name and class
+    component source: own_scs | inherited | native
+    attach relationship
+    collision/movement/replication/tick/visual/ability config
+    runtime chain participation
+    component-specific risks
+
+  inspect non-default values:
+    numeric values: damage, radius, duration, cooldown, lifespan, delay, TickInterval
+    references: Ability, GameplayEffect, Weapon, Summon, Projectile, Detector,
+      Filter, GameplayCue, DataAsset, Curve, Mesh, Effect
+    GameplayTags: trigger, block, owned, immunity, state transition, event
+    networking: Authority, LocallyControlled, Simulated, Replicates,
+      ReplicateInput, NetExecutionPolicy
+    lifecycle: Spawn/Destroy, CommitCost, ApplyCooldown, EndAbility,
+      Cancel, RemoveEffect
+    explain meaning, why it matters, and possible risk for every key override
+
   identify entry events and state transitions
   identify Tick/Timer/Async/Latent usage
   inspect network authority/client execution
   inspect asset load/reference closure
   inspect GameplayEffect/Attribute/Tag dependencies
   inspect component hierarchy and collision setup
+  scan for:
+    incomplete lifecycle closure
+    Cost/CD/EndAbility ordering risk
+    client/server execution mismatch
+    excessive Tick/Timer/Detector frequency
+    inconsistent GameplayTag vocabulary
+    cross-character or stale asset references
+    GE immunity/death/removal conflicts
+    control/input/weapon-switch state leaks
 
 Report:
+  state analysis_depth and evidence boundary
+  classify evidence:
+    strong: live/meta field, C++ source, AssetRegistry dependency
+    medium: local framework convention, parent-class semantic inference, reference-chain inference
+    weak: asset name, directory name, naming convention only
   findings by severity
   evidence paths
   performance risks
   safety/null reference risks
   design consistency risks
+  manual verification points
 ```
 
 ### 模板 4：蓝图 bug 查找

@@ -405,6 +405,29 @@ Verify:
 分析蓝图功能、C++ 逻辑链路、性能、安全、合理性。
 ```
 
+开始要求：
+
+```text
+分析任务开始时必须先确认分析深度，不能自行默认深度。
+
+可选深度：
+  quick:
+    资产职责、关键链路、明显风险。
+  standard:
+    父类 C++ 语义、蓝图组件、非默认 CDO / component 值、引用链、
+    主要性能/网络/生命周期风险。
+  deep:
+    在 standard 基础上，展开主要 graph summary/pins、逐 Atom / GE /
+    Detector 配置含义、核心状态机、风险矩阵。
+  audit:
+    在 deep 基础上，必须使用 UEEditorAutomation live 只读任务重新
+    Observe，导出 graph pins / 组件 / CDO / 引用图，并输出逐资产、
+    逐字段证据表。
+
+如果用户已经明确要求“详细”“全面”“审计”“逐资产”等强语义，可按
+deep 或 audit 推断执行，但必须在报告开头写明采用的深度和原因。
+```
+
 流程：
 
 ```text
@@ -415,6 +438,38 @@ Observe:
   export reference graph
 
 Analyze:
+  对每个目标蓝图建立结构化条目：
+    asset path
+    parent class
+    native C++ header/cpp path
+    parent C++ core responsibility and key execution functions
+    blueprint role in runtime chain
+    own / inherited / native components
+    non-default CDO fields
+    non-default component fields
+    direct dependencies and referencers
+
+  必须分析蓝图父类 C++：
+    提炼父类核心功能、生命周期入口、执行端(authority/client)、
+    Tick/Timer/Async/Latent 行为、复制/预测相关字段、关键 virtual/
+    BlueprintNativeEvent/BlueprintImplementableEvent。
+
+  必须分析蓝图 add / own components：
+    组件名、组件类、组件来源(own_scs / inherited / native)、attach 关系、
+    collision / movement / replication / tick / visual / ability 相关配置、
+    组件参与的运行时链路和潜在风险。
+
+  必须分析非默认值：
+    数值：伤害、半径、持续时间、冷却、生命周期、延迟、TickInterval。
+    引用：Ability、GameplayEffect、Weapon、Summon、Projectile、Detector、
+      Filter、GameplayCue、DataAsset、Curve、Mesh、Effect。
+    GameplayTag：触发、阻塞、拥有、免疫、状态切换、事件。
+    网络：Authority、LocallyControlled、Simulated、Replicates、
+      ReplicateInput、NetExecutionPolicy。
+    生命周期：Spawn/Destroy、CommitCost、ApplyCooldown、EndAbility、
+      Cancel、RemoveEffect。
+    对每个关键非默认值说明“这个值为什么重要 / 可能意味着什么 / 风险是什么”。
+
   入口事件和状态流
   Tick/Timer/Async/Latent
   网络同步和 authority/client
@@ -422,7 +477,22 @@ Analyze:
   资产依赖
   空引用/循环引用/运行时加载风险
 
+  强制风险扫描：
+    生命周期闭环是否完整
+    Cost/CD/EndAbility 时序是否可能错误
+    Client/Server 执行端是否一致
+    Tick/Timer/Detector 是否可能过密
+    GameplayTag 口径是否统一
+    是否存在跨角色/旧资产引用残留
+    GE 免疫、死亡、移除条件是否冲突
+    控制权、输入、武器切换是否可能残留状态
+
 Report:
+  报告必须标注分析深度和证据等级：
+    strong: live/meta 字段、C++ 源码、AssetRegistry 依赖
+    medium: 项目框架约定、父类职责推导、引用链推导
+    weak: 仅资产名、目录名、命名约定推断
+
   findings by severity
   evidence paths
   修复建议或验证点
