@@ -426,12 +426,20 @@ Verify:
 
 如果用户已经明确要求“详细”“全面”“审计”“逐资产”等强语义，可按
 deep 或 audit 推断执行，但必须在报告开头写明采用的深度和原因。
+
+默认禁止读取旧分析报告、历史总结、旧 Markdown 报告来作为本次分析依据，
+避免复述旧结论。除非用户明确要求“继续上次报告”“基于旧报告补充”
+或指定某份报告路径，否则 Observe 阶段只能读取 live UE 只读结果、
+meta/listing/result 原始产物、资产文件、C++ 源码、配置表和数据表。
+如果确实读取了旧报告，必须在报告开头声明旧报告路径、使用原因，以及
+哪些结论已用 live/meta/C++ 证据重新验证。
 ```
 
 流程：
 
 ```text
 Observe:
+  do not read old analysis reports unless explicitly requested by user
   snapshot blueprint
   export graph summary/pins
   snapshot native parent C++ context
