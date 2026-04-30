@@ -31,12 +31,6 @@ CI 协议：
 .\Scripts\Run-AutomationTask.ps1 -TaskPath .\Samples\valid\generate_audit_report_basic.json -FailOnTaskFailure
 ```
 
-运行样例回归（要求编辑器已经由 CI 或用户手动启动）：
-
-```powershell
-python .\Scripts\automation_test.py --samples-dir .\Samples
-```
-
 通过本地 socket 提交：
 
 ```powershell
@@ -62,4 +56,3 @@ socket 默认禁用。在 `UEditorAutomationSettings` 打开
 - 每次 CI run 用唯一的 `task_id`。
 - 在 CI 校验阶段开始前清空 `tasks/inbox` 与 `tasks/working`。
 - socket 只用于本机 `127.0.0.1` 上的可信自动化。
-- `automation_test.py` 只投递任务和读取 result，不会启动编辑器或触发 C++ 编译。

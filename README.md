@@ -50,15 +50,55 @@ Plugins/UEEditorAutomation/Config/UEEditorAutomationTemplates.json
 白名单中字段为空数组表示"不限制" —— 调宽自动化范围请改 JSON，
 不要重新编译 C++。
 
-轻量回归脚本：
-
-```
-python .\Scripts\automation_test.py --samples-dir .\Samples
-```
-
-要求编辑器已由用户或 CI 手动启动；脚本不会启动编辑器或触发 C++ 编译。
 蓝图写入任务可以在运行中的编辑器里执行 Blueprint compile + save，
 这用于暴露蓝图编译错误，不属于 C++ 构建流程。
+
+## 打包
+
+给只使用编辑器的人分发时，先由有编译环境的人执行 BuildPlugin 打包。
+脚本参数：
+
+- `ProjectRoot`：必传。可传项目根目录，例如 `D:\YourProject`；也可传包含
+  `Engine` 和项目目录的源码根目录，例如 `D:\YourSourceCheckout`
+- `Configuration`：打包配置，默认 `Development`。`Development` 使用
+  RunUAT BuildPlugin；`DebugGame` 使用 UBT 编译项目 Editor target 后整理插件目录
+- `TargetName`：DebugGame 模式下的 Editor target，默认 `<uproject 文件名>Editor`
+- `PackageArgs`：传给 Development BuildPlugin 的额外打包参数，默认
+  `-TargetPlatforms=Win64`
+
+PowerShell 示例：
+
+```powershell
+.\Scripts\Package-UEEditorAutomationPlugin.ps1 -ProjectRoot "D:\YourProject"
+```
+
+源码根目录示例：
+
+```powershell
+.\Scripts\Package-UEEditorAutomationPlugin.ps1 -ProjectRoot "D:\YourSourceCheckout"
+```
+
+如需覆盖默认打包参数：
+
+```powershell
+.\Scripts\Package-UEEditorAutomationPlugin.ps1 `
+  -ProjectRoot "D:\YourProject" `
+  -PackageArgs "-TargetPlatforms=Win64","-Rocket"
+```
+
+DebugGame 示例：
+
+```powershell
+.\Scripts\Package-UEEditorAutomationPlugin.ps1 `
+  -ProjectRoot "D:\YourProject" `
+  -Configuration DebugGame
+```
+
+默认输出目录：
+
+```text
+<ProjectRoot>\PluginPackages\UEEditorAutomation_UE4.25_Win64_<Configuration>
+```
 
 ## 集成
 

@@ -162,14 +162,12 @@ diff 工具把所有 35/35 非 BP 文件标为不同，因为
 
 ## 测试覆盖
 
-### TD-TC-1 [DONE] 仓库里没有自动化回归
+### TD-TC-1 [OPEN] 仓库里没有自动化回归
 
-今天的校验靠手工：跑样例任务、肉眼看 result。验收清单是 Markdown。
-一个小的 `automation_test.py` 在编辑器跑着的时候投递 `Samples/valid/`
-全集并断言 result JSON，不需要完整 UE Automation Framework 也能
-拦住协议回归。
-
-已新增 `Scripts/automation_test.py`。
+当前校验靠手工：跑样例任务、肉眼看 result。验收清单是 Markdown。
+仓库不再保留临时样例回归脚本；后续如果要恢复自动化覆盖，应做成
+CI 专用脚本或 UE Automation Framework 测试，并明确不会启动编辑器
+或触发 C++ 编译。
 
 ---
 

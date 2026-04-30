@@ -24,7 +24,7 @@
 #if ENGINE_MAJOR_VERSION >= 5
 #include "Subsystems/AssetEditorSubsystem.h"
 #else
-#include "AssetEditorManager.h"
+#include "Toolkits/AssetEditorManager.h"
 #endif
 #include "UObject/UnrealType.h"
 

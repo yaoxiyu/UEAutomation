@@ -222,7 +222,7 @@ struct FAutomationTaskResult
     void AddError(const FString& Code, const FString& Message, const FString& Field = FString());
     void AddWarning(const FString& Message);
     void AddLog(const FString& Message);
-    void AddFieldResult(const FString& Path, const FString& Status, const FString& WriteTarget, const FString& WriteMode, const FString& Reason = FString(), const FString& Message = FString());
+    void AddFieldResult(const FString& Path, const FString& FieldStatus, const FString& WriteTarget, const FString& WriteMode, const FString& Reason = FString(), const FString& Message = FString());
 };
 
 class FAutomationProtocolJson

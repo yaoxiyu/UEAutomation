@@ -53,11 +53,11 @@ void FAutomationTaskResult::AddLog(const FString& Message)
     LogLines.Add(Message);
 }
 
-void FAutomationTaskResult::AddFieldResult(const FString& Path, const FString& Status, const FString& WriteTarget, const FString& WriteMode, const FString& Reason, const FString& Message)
+void FAutomationTaskResult::AddFieldResult(const FString& Path, const FString& FieldStatus, const FString& WriteTarget, const FString& WriteMode, const FString& Reason, const FString& Message)
 {
     FAutomationFieldResult Result;
     Result.Path = Path;
-    Result.Status = Status;
+    Result.Status = FieldStatus;
     Result.WriteTarget = WriteTarget;
     Result.WriteMode = WriteMode;
     Result.Reason = Reason;
