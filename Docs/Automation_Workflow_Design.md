@@ -576,7 +576,8 @@ Verify:
 
 ```text
 target_blueprints
-analysis_depth: quick | standard | deep | audit
+analysis_mode: analysis | audit
+analysis_depth optional: quick | standard | deep
 analysis_focus: performance | networking | safety | gameplay | all
 reference_context optional
 ```
@@ -584,24 +585,24 @@ reference_context optional
 开始要求：
 
 ```text
-任何蓝图功能分析任务，开始时必须确认 analysis_depth，不能由 AI 自行
-静默选择深度。
+任何蓝图功能分析任务，开始时必须确认 analysis_mode，不能由 AI 自行
+静默选择模式。
 
-depth 定义：
-  quick:
-    资产职责、关键链路、明显风险。
-  standard:
-    父类 C++ 语义、组件结构、非默认值、引用链、主要性能/网络/
-    生命周期风险。
-  deep:
-    在 standard 基础上，展开主要 graph summary/pins、逐 Atom / GE /
-    Detector 配置含义、核心状态机、风险矩阵。
+mode 定义：
+  analysis:
+    分析模式。允许参考 meta/listing/result 原始产物作为线索和证据，
+    重点输出功能职责、主要逻辑链路、关键非默认值、核心风险和验证点。
+    可按 quick / standard / deep 控制篇幅，但必须声明证据边界。
   audit:
-    在 deep 基础上，必须重新执行 live 只读 Observe，导出 graph pins、
-    组件、CDO、引用图，并输出逐资产逐字段证据表。
+    审计模式。meta 只能用于列资产、生成候选清单和定位历史 result，
+    不能作为参数真相或结论来源。必须通过 UEEditorAutomation live
+    只读任务重新反射读取目标范围内所有蓝图的 CDO、所有组件模板、
+    所有组件参数、引用链、graph summary/pins，并分析每个蓝图自身
+    C++ 父类和每个组件 C++ 类的实现风险。
 
-如果用户已明确说“详细/全面/审计/逐资产/暴露潜在问题”，可推断为
-deep 或 audit，但报告开头必须说明采用深度、推断原因和证据边界。
+如果用户已明确说“审计/全面审计/逐资产逐字段/暴露潜在问题”，必须使用
+audit。其它功能说明、机制理解、初步排查默认使用 analysis。报告开头
+必须说明采用模式、原因和证据边界。
 
 默认禁止读取旧分析报告、历史总结、旧 Markdown 报告来作为本次分析依据，
 避免复述旧结论。除非用户明确要求“继续上次报告”“基于旧报告补充”
@@ -616,13 +617,28 @@ meta/listing/result 原始产物、资产文件、C++ 源码、配置表和数�
 ```text
 Observe:
   do not read old analysis reports unless explicitly requested by user
-  snapshot blueprint
-  export graph summary/pins as needed
-  snapshot native parent C++ context
-  export reference graph
-  snapshot component hierarchy
-  snapshot class defaults and component defaults
-  collect direct dependencies and referencers
+  analysis mode:
+    may read existing meta/listing/result raw artifacts, asset files,
+      C++ source, config tables, and data tables
+    run live analyze_blueprint / analyze_asset when existing evidence is
+      incomplete, stale, or disputed
+
+  audit mode:
+    must submit fresh live read-only Observe tasks; existing meta is only an
+      index and cannot be used as parameter truth
+    must cover every blueprint under target scope
+    for directly referenced non-blueprint assets, list them and analyze those
+      that affect runtime behavior, such as DataAsset / Curve / DataTable /
+      GameplayEffect-like assets
+    for each blueprint export:
+      full reflected CDO parameters with default/inherited comparison
+      native / inherited / own component list
+      full reflected component template parameters for every component
+      graph summary; graph pins/edges when execution order matters
+      direct dependencies, referencers, referenced blueprints
+      native parent C++ context
+    for each component class, export or locate native C++ context
+    any live read failure must be reported as Blocking or Coverage Gap
 
 Analyze:
   for each blueprint, create a structured analysis item:
@@ -644,6 +660,45 @@ Analyze:
     replication/prediction/input handling
     important virtual or Blueprint event hooks
     expected subclass responsibilities
+
+  audit mode extra requirements:
+    do not inspect only non-default values; traverse every live reflected CDO
+      field and every live reflected component field
+    classify each field as:
+      explicit_override: explicitly overridden by this blueprint and runtime-relevant
+      inherited_default: inherited/default value, not overridden but semantically important
+      noise/editor_only: editor display, cache, transient, or runtime-irrelevant
+      unresolved: reflection failed, truncated, uninterpretable, or requires runtime proof
+    for every explicit_override:
+      explain design meaning, C++ consumption point, runtime effect, and risk
+    for key inherited_default values:
+      explain why the default is safe or what hidden risk it carries
+    for unresolved fields:
+      output concrete live/runtime/manual verification points
+
+    audit every own/inherited/native component C++ class:
+      constructor defaults and lifecycle functions such as BeginPlay,
+        Initialize, OnRegister, EndPlay, Tick
+      replication, collision, movement, visibility, attachment, event binding
+      how reflected component parameters are consumed by C++
+      whether current blueprint values match C++ assumptions
+      risks including heavy tick, repeated scans, unbound events, null refs,
+        lifetime ordering, stale caches, and authority/client mismatch
+
+  audit C++ implementation risks, not just class purpose:
+    read key .h/.cpp implementation involved by the blueprint configuration
+    trace the actual function chain reached by Check/Activator/Giver/Weapon/
+      StateAtom/Detector/GE configuration
+    inspect preconditions, null/weak pointer checks, authority checks,
+      state-machine branches, failure paths, cleanup, event unbinding,
+      object lifetime, cache invalidation, container traversal,
+      runtime load / async load, Tick / Timer registration and unregistering
+    judge whether C++ default behavior combined with current blueprint
+      overrides can create edge cases
+    identify hard configuration prerequisites expected by the parent class
+      and whether the blueprint satisfies them
+    if evidence is insufficient, output concrete live/runtime breakpoints
+      to verify
 
   inspect blueprint-added components:
     component name and class
@@ -670,6 +725,24 @@ Analyze:
   inspect asset load/reference closure
   inspect GameplayEffect/Attribute/Tag dependencies
   inspect component hierarchy and collision setup
+  evaluate design-chain rationality:
+    input/trigger condition -> Check/PreCheck -> Activator/Giver ->
+      Weapon/Actor/Component -> StateAtom/Detector -> GE/Tag/Attribute ->
+      End/Cancel/Destroy/Cleanup
+    judge whether the chain is closed, whether responsibilities are duplicated,
+      whether it over-relies on implicit GameplayTags, whether runtime state is
+      hidden in hard-to-track events, whether configuration and C++ semantics
+      are mismatched, and whether the same behavior can be expressed with more
+      centralized, data-driven, lower-frequency, or lower-reference designs
+  identify optimization opportunities:
+    performance: reduce Tick/Timer/Detector scans, narrow radius, cache targets,
+      reduce runtime loads, reuse pools, reduce unnecessary client/simulated execution
+    architecture: reduce cross-character references, unify Tag vocabulary and
+      lifecycle events, extract shared Atoms, clarify Cost/CD/EndAbility ordering,
+      replace implicit state with explicit state machines or data tables
+    maintainability: reduce reference-chain depth, remove duplicate GE/Detector
+      configurations, add naming/comments/validation rules for key fields,
+      add automation checks
   scan for:
     incomplete lifecycle closure
     Cost/CD/EndAbility ordering risk
@@ -681,13 +754,28 @@ Analyze:
     control/input/weapon-switch state leaks
 
 Report:
-  state analysis_depth and evidence boundary
+  state analysis_mode, optional analysis_depth, and evidence boundary
   classify evidence:
     strong: live/meta field, C++ source, AssetRegistry dependency
     medium: local framework convention, parent-class semantic inference, reference-chain inference
     weak: asset name, directory name, naming convention only
+  audit mode report must include:
+    coverage: target blueprint count, live reflection success count, failures,
+      skipped assets and reasons
+    per-blueprint native parent C++ implementation audit
+    per-blueprint component list and component C++ implementation audit
+    per-blueprint CDO field classification summary and key field explanations
+    per-component parameter classification summary and key parameter explanations
+    design-chain rationality assessment
+    severity-ranked risks: Blocking / High / Medium / Low / Noise
+    optimization recommendations for performance, networking, lifecycle,
+      architecture, and maintainability
+    manual/runtime verification breakpoints
   findings by severity
   evidence paths
+  C++ implementation risks and optimization opportunities
+  design-chain rationality assessment
+  alternative design or local optimization suggestions with benefit/cost
   performance risks
   safety/null reference risks
   design consistency risks
