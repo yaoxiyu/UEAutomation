@@ -11,6 +11,7 @@ public class UEEditorAutomation : ModuleRules
             "Core",
             "CoreUObject",
             "Engine",
+            "GameplayTags",
             "Json",
             "JsonUtilities"
         });

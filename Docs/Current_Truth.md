@@ -12,9 +12,13 @@
     -> 结构化 *.result.json + 单任务 log
 ```
 
-插件是 editor-only，加载阶段为 `PostEngineInit`。所有 UE 编译、重启、
-编辑器启动都由用户手动完成。AI 代理绝不能调用 UBT、UAT、生成项目文件
-或启动编辑器。
+插件是 editor-only，加载阶段为 `PostEngineInit`。所有 C++ 编译、UBT、
+UAT、GenerateProjectFiles、Live Coding、编辑器重启/启动都由用户或 CI
+手动完成。AI 代理绝不能调用这些构建/启动入口。
+
+蓝图编译是运行中编辑器里的资产操作，不属于上述 C++ 编译禁令。
+创建或修改蓝图结构、CDO、组件、引用关系后，自动化任务应执行
+Blueprint compile + save，用来暴露蓝图编译错误和持久化问题。
 
 ## 运行时目录
 
@@ -33,7 +37,16 @@ C:/UEAutomation/
 
 ```
 <PluginDir>/Saved/BlueprintMetaCache/    Phase 4 meta、目录列表、AI context
+<PluginDir>/Saved/TaskReports/           AI 任务流程报告与同名归档 zip
 ```
+
+`Saved/TaskReports/` 由 AI 编排器在使用 UEEditorAutomation 执行蓝图/资产
+分析、创建、修改、复制、引用重写、验证等自动化任务后维护；普通问答、
+源码阅读、文档编辑、方案讨论、非 UE 自动化脚本的小改动不触发该流程。
+报告名使用 `yyyyMMddHHmmss_中文概述.md`，同名 `.zip` 收纳本次过程生成的
+JSON 和 JS。报告以文字说明目标、观察、计划、执行、task_id/result、验证、
+风险和人工后续动作为主，不直接粘贴大段 JSON。zip 创建成功后，AI 应删除
+本次散落的临时 JSON/JS；UEAutomation 的 `tasks`/`results` 正式归档不删除。
 
 配置：
 
@@ -66,10 +79,28 @@ Config/UEEditorAutomationTemplates.json    蓝图模板
 - `modify_blueprint_components` —— 支持 `add_component` 和
   `update_component_properties`
 - `modify_blueprint_defaults` —— 通过 ImportText 写入 CDO 属性
+- `copy_blueprint_live_overrides` —— 从 source live Blueprint 自动发现并
+  复制 CDO、owned SCS、inherited SCS、native component override；调用方
+  不提供字段值，也不枚举 target_kind
+- `copy_live_blueprint_values` —— 从 source live 蓝图对象读取真实 CDO /
+  component 属性值，再写入 target live 蓝图对象；meta 只用于候选计划，
+  不作为 value 来源
 
 组件模板查找会同时遍历 SCS 节点和父类的 native UPROPERTY 组件字段。
 `update_component_properties` 支持 `component_lookup_policy`，可在
-`scs_first`、`native_first`、`scs_only`、`native_only` 间选择。
+`scs_first`、`native_first`、`scs_only`、`native_only`、
+`scs_inherited_override` 间选择。`scs_inherited_override` 会在目标
+子蓝图的 `UInheritableComponentHandler` 中创建或获取 inherited
+component override template，再写入属性。
+
+新任务推荐用 `target_kind` 表达写入目标：
+
+- `own_scs_template`
+- `scs_inherited_override`
+- `native_template`
+
+`target_kind` 会映射到对应查找/写入策略；旧的
+`component_lookup_policy` 继续兼容。
 
 ### 属性赋值
 
@@ -77,10 +108,17 @@ Config/UEEditorAutomationTemplates.json    蓝图模板
 - 对象/类硬引用与软引用（null 写为 `None`）
 - 容器递归：array、set、map（含 array of struct、map of struct）
 - 结构体递归：struct 字段本身可以是容器、enum、子 struct、对象引用
+- 原生属性文本：`import_text` 直接回放 Phase 4 中
+  `FProperty::ExportTextItem` 导出的文本，用于复杂 GAS/项目自定义
+  struct、深层容器等 JSON 结构化写入不稳定的字段；蓝图 defaults /
+  component 修改任务可携带 `redirects[]`，raw 文本导入前会做对象路径
+  与 package 前缀替换
 - 特化路径：`StaticMesh`、`SkeletalMesh`、`CollisionProfileName`
 - Phase 4 truncated 标记会在写入阶段被检测并拒绝
 - 写入器会检查 `ImportText` 完整消费输入，并对写入后的属性做
-  `ExportText -> ImportText -> Identical` 往返校验
+  `ExportText -> ImportText -> Identical` 往返校验；`import_text`
+  只做完整消费校验，因为部分 UE FieldPath/GAS 结构不能可靠通过
+  scratch 往返但能被目标属性原生导入
 
 ### 非蓝图资产创建
 
@@ -107,6 +145,7 @@ PhysicsAsset 走非交互的 `FPhysicsAssetUtils::CreateFromSkeletalMesh`
 - `analyze_blueprint` —— native 父类链、父类 C++ 源码定位 + combined
   MD5、蓝图快照（CDO 默认值、SCS 组件含 native 组件、用户变量）、
   正向引用与反向引用、可选只读图节点摘要或完整 pin/edge
+ ；每个导出的属性同时包含结构化 `value` 与原生 `import_text`
 - `analyze_blueprint_reference_chain` —— 受限 BFS、为每个节点生成 meta、
   写出 `<asset>.graph.json`
 - `refresh_blueprint_meta_cache` —— 强制刷新
@@ -125,6 +164,21 @@ partial_hit_source_same_asset_changed
 miss_options_changed
 forced_refresh
 miss_source_unresolved
+```
+
+当前 blueprint meta `schema_version=2`。当 meta 输出结构或语义变化时，
+必须同步提升 `UEAutomation::MetaCache::CurrentSchemaVersion`；当分析参数
+影响输出内容的规则变化时，也要提升 `ComputeOptionsDigest` 里的
+analysis-options schema 字符串。
+
+meta 的事实边界：
+
+```text
+meta 是分析缓存，不是 live asset truth。
+meta 可以辅助 AI 生成候选 workflow plan。
+Mutation / Validation 必须重新 LoadObject / 反射读取 live UE 对象。
+写入 expected、写入 actual、组件存在性、override 存在性、diff 结果都不能只信 meta。
+meta 与 live 对象冲突时，以 live 对象为准，并刷新 meta。
 ```
 
 如果 `<PluginDir>/Saved/BlueprintMetaCache/` 不可写，插件会回退到
@@ -169,6 +223,16 @@ miss_source_unresolved
       "asset_path": "...",
       "cache_status": "...",
       "parent_cpp_md5": "..."
+    }
+  ],
+  "field_results": [
+    {
+      "path": "Component.AttackComponent.Projectiles",
+      "status": "written",
+      "write_target": "native_template",
+      "write_mode": "import_text",
+      "reason": "native_template",
+      "message": ""
     }
   ],
   "warnings": ["..."],

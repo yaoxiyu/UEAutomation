@@ -140,14 +140,16 @@ create 流程下没有"Q 的 sub-object 已加载且配对到 CopyQ 的替换体
 
 ---
 
-## Q -> CopyQ 编排（树外脚本）
+## Q -> CopyQ 编排（历史临时脚本）
 
 ### TD-O-1 [HIGH] 编排器跳过已知会失败的类型
 
-Node 编排器（`Saved/copyq_orchestrator.js`）会丢弃它预期写入器会拒
-绝的字段。写入器扩展之后这层过滤已经放宽，但仍会跳过任何 Phase 4
-导出含 `truncated` 标记的字段。没有第二轮回退（先用更深 depth
-`force_refresh` 重导后再写）。
+历史 Node 编排器会丢弃它预期写入器会拒绝的字段。写入器扩展之后这
+层过滤已经放宽，但仍会跳过任何 Phase 4 导出含 `truncated` 标记的
+字段。没有第二轮回退（先用更深 depth `force_refresh` 重导后再写）。
+
+注意：`Saved/*.js` 不再作为可复用入口。后续任务必须由 AI 按当前
+workflow template 和当前 meta 生成本次 plan/临时胶水，执行后删除。
 
 ### TD-O-2 [MED] 非蓝图比对用了 uasset MD5
 

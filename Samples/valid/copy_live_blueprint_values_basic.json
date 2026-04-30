@@ -1,0 +1,33 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_copy_live_blueprint_values_basic_001",
+  "task_type": "copy_live_blueprint_values",
+  "execution": {
+    "save_after_success": true,
+    "compile_after_create": true,
+    "open_after_success": false
+  },
+  "payload": {
+    "source_asset_path": "/Game/PaperMan/CyAbilities/Yugiri/Q/BP_DamageType_Q_Yugiri.BP_DamageType_Q_Yugiri",
+    "target_asset": {
+      "asset_path": "/Game/PaperMan/CyAbilities/Yugiri/CopyQ/BP_DamageType_Q_Yugiri.BP_DamageType_Q_Yugiri"
+    },
+    "class_defaults": [
+      {
+        "name": "WeaponNameTag"
+      }
+    ],
+    "operations": [
+      {
+        "op": "copy_component_properties",
+        "component_name": "StateEquip",
+        "target_kind": "native_template",
+        "properties": [
+          {
+            "name": "LooseGameplayTags"
+          }
+        ]
+      }
+    ]
+  }
+}

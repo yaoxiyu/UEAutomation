@@ -1,0 +1,27 @@
+{
+  "protocol_version": 1,
+  "task_id": "task_copy_blueprint_live_overrides_basic_001",
+  "task_type": "copy_blueprint_live_overrides",
+  "timestamp_utc": "2026-04-30T00:00:00Z",
+  "execution": {
+    "save_after_success": true,
+    "compile_after_create": true,
+    "open_after_success": false
+  },
+  "payload": {
+    "source_asset_path": "/Game/PaperMan/CyAbilities/Yugiri/Q/Weapon/Weapon_Q_Yugiri.Weapon_Q_Yugiri",
+    "target_asset": {
+      "asset_path": "/Game/PaperMan/CyAbilities/Yugiri/CopyQ/Weapon/Weapon_Q_Yugiri.Weapon_Q_Yugiri"
+    },
+    "redirects": [
+      {
+        "from": "/Game/PaperMan/CyAbilities/Yugiri/Q/Weapon/Weapon_Q_Yugiri.Weapon_Q_Yugiri",
+        "to": "/Game/PaperMan/CyAbilities/Yugiri/CopyQ/Weapon/Weapon_Q_Yugiri.Weapon_Q_Yugiri"
+      },
+      {
+        "from": "/Game/PaperMan/CyAbilities/Yugiri/Q/Weapon/Weapon_Q_Yugiri.Weapon_Q_Yugiri_C",
+        "to": "/Game/PaperMan/CyAbilities/Yugiri/CopyQ/Weapon/Weapon_Q_Yugiri.Weapon_Q_Yugiri_C"
+      }
+    ]
+  }
+}

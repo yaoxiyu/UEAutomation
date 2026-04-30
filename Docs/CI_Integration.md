@@ -1,6 +1,8 @@
 # CI 集成
 
-本插件不会自己编译或启动 UE，那些步骤由 CI 负责。
+本插件不会自己触发 C++ 编译或启动 UE，那些步骤由 CI 负责。蓝图写入任务
+可以在 CI 已启动的编辑器内执行 Blueprint compile + save，用于发现蓝图
+编译错误。
 
 CI 协议：
 
@@ -54,9 +56,10 @@ socket 默认禁用。在 `UEditorAutomationSettings` 打开
 
 ## 规则
 
-- 不要让 AI 代理跑本项目的 CI 编译命令。
-- UE 编译与编辑器启动放在插件脚本之外。
+- 不要让 AI 代理跑本项目的 CI/C++ 编译命令。
+- C++ 编译与编辑器启动放在插件脚本之外。
+- 蓝图写入任务应在已运行编辑器内执行 Blueprint compile + save。
 - 每次 CI run 用唯一的 `task_id`。
 - 在 CI 校验阶段开始前清空 `tasks/inbox` 与 `tasks/working`。
 - socket 只用于本机 `127.0.0.1` 上的可信自动化。
-- `automation_test.py` 只投递任务和读取 result，不会启动编辑器或触发编译。
+- `automation_test.py` 只投递任务和读取 result，不会启动编辑器或触发 C++ 编译。

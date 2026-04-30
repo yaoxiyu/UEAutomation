@@ -76,7 +76,7 @@ bool FAssetAutomationService::CreateDataAsset(const FAutomationTaskRequest& Requ
 
     if (Request.ClassDefaults.Num() > 0)
     {
-        if (!PropertyAssignmentService.AssignProperties(Asset, Request.ClassDefaults, OutResult, TEXT("payload.properties")))
+        if (!PropertyAssignmentService.AssignProperties(Asset, Request.ClassDefaults, OutResult, TEXT("payload.properties"), Request.AssetRedirects))
         {
             return false;
         }
@@ -291,7 +291,7 @@ bool FAssetAutomationService::ModifyAssetProperties(const FAutomationTaskRequest
         return false;
     }
 
-    if (!PropertyAssignmentService.AssignProperties(Asset, Request.ClassDefaults, OutResult, TEXT("payload.properties")))
+    if (!PropertyAssignmentService.AssignProperties(Asset, Request.ClassDefaults, OutResult, TEXT("payload.properties"), Request.AssetRedirects))
     {
         return false;
     }
@@ -661,7 +661,7 @@ bool FAssetAutomationService::CreateAssetWithFactory(const FAutomationTaskReques
             AssignTarget = Blueprint->GeneratedClass ? Blueprint->GeneratedClass->GetDefaultObject() : Asset;
         }
 
-        if (!PropertyAssignmentService.AssignProperties(AssignTarget, Request.ClassDefaults, OutResult, TEXT("payload.properties")))
+        if (!PropertyAssignmentService.AssignProperties(AssignTarget, Request.ClassDefaults, OutResult, TEXT("payload.properties"), Request.AssetRedirects))
         {
             return false;
         }
@@ -713,7 +713,7 @@ bool FAssetAutomationService::CreatePlainObjectAsset(const FAutomationTaskReques
         return false;
     }
 
-    if (Request.ClassDefaults.Num() > 0 && !PropertyAssignmentService.AssignProperties(Asset, Request.ClassDefaults, OutResult, TEXT("payload.properties")))
+    if (Request.ClassDefaults.Num() > 0 && !PropertyAssignmentService.AssignProperties(Asset, Request.ClassDefaults, OutResult, TEXT("payload.properties"), Request.AssetRedirects))
     {
         return false;
     }

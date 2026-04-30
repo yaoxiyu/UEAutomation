@@ -6,7 +6,9 @@
 
 - 插件 editor-only。
 - 编辑器运行时把任务文件投递到 `C:/UEAutomation/tasks/inbox`。
-- AI 代理不能调用 UBT、UAT、生成项目文件、启动编辑器。
+- AI 代理不能调用 UBT、UAT、生成项目文件、启动编辑器，不能触发 C++ / Live Coding 编译。
+- `compile_after_create` 表示在已运行的编辑器中执行 Blueprint compile，不是 C++ 编译。创建或修改蓝图结构、CDO、组件、引用关系后，应设置 `compile_after_create: true` 并 `save_after_success: true`，用来暴露蓝图编译错误和持久化问题。
+- 只读分析任务、非蓝图资产复制/分析任务不需要蓝图编译。
 
 ## 传输方式
 
@@ -25,6 +27,21 @@ C:/UEAutomation/
 
 生命周期：`inbox/*.json -> working/*.json -> done/*.json 或 failed/*.json`。
 结果路径：`C:/UEAutomation/results/<task_id>.result.json`。
+
+任务级收尾归档由 AI 编排器负责，不由 UE 插件自动完成。仅当用户要求 AI
+使用 UEEditorAutomation 执行蓝图/资产分析、创建、修改、复制、引用重写、
+验证等自动化任务时，AI 必须把本次生成/提交的任务 JSON、workflow plan、
+result 摘要和临时 JS 汇总为文字流程报告，输出到：
+
+```
+<PluginDir>/Saved/TaskReports/yyyyMMddHHmmss_中文概述.md
+```
+
+随后将本次过程生成的 JSON 和 JS 打包为同名 `.zip`，确认压缩包可读后删除
+散落的临时 JSON/JS。报告中记录 task_id、result 路径、成功/失败状态和验证
+结论，不直接粘贴大段 JSON。`C:/UEAutomation/tasks` 与 `C:/UEAutomation/results`
+中的正式归档不删除。普通问答、源码阅读、文档编辑、方案讨论、非 UE 自动化
+脚本的小改动，不触发该报告/zip 流程。
 
 ### 本地 socket
 
@@ -59,6 +76,8 @@ C:/UEAutomation/
   "payload": { ... }
 }
 ```
+
+对蓝图写入任务，推荐保持 `compile_after_create: true`。如果任务只是列目录、分析资产、复制非蓝图资源，可以省略或设为 false。
 
 ## 通用 result 结构
 
@@ -98,6 +117,29 @@ UPROPERTY 组件也能用同样的名字访问。
 | `native_first` | 先查 native UPROPERTY 组件，再查 SCS |
 | `scs_only` | 只查 SCS |
 | `native_only` | 只查 native UPROPERTY 组件 |
+| `scs_inherited_override` | 查父蓝图 SCS 组件，并在目标子蓝图的 `UInheritableComponentHandler` 中创建/获取 override template |
+
+新任务推荐使用更明确的 `target_kind`，旧的 `component_lookup_policy`
+继续兼容：
+
+| target_kind | 写入目标 |
+|---|---|
+| `own_scs_template` | 当前蓝图自身 SCS component template |
+| `scs_inherited_override` | 当前蓝图对父类 SCS component 的 inherited override template |
+| `native_template` | C++ native component template |
+
+示例：
+
+```json
+{
+  "op": "update_component_properties",
+  "component_name": "CySceneMapYugiriX",
+  "target_kind": "scs_inherited_override",
+  "properties": [
+    { "name": "VisionSwitch", "type": "import_text", "value": "(bVisibleToCustom=True)" }
+  ]
+}
+```
 
 #### `modify_blueprint_defaults`
 
@@ -105,6 +147,82 @@ UPROPERTY 组件也能用同样的名字访问。
 required:  payload.target_asset.asset_path
            payload.class_defaults[]  （或 payload.properties[]）
 sample:    Samples/modify_blueprint_defaults.json
+```
+
+#### `copy_live_blueprint_values`
+
+从 source live 蓝图对象读取真实属性值，再写入 target live 蓝图对象。该任务不使用
+meta 里的 value，也不信任调用方传入的 property value；`properties[]` /
+`class_defaults[]` 只提供要复制的属性名。
+
+```
+required:  payload.source_asset_path
+           payload.target_asset.asset_path
+           payload.class_defaults[] 或 payload.operations[]
+```
+
+CDO 字段复制：
+
+```json
+{
+  "task_type": "copy_live_blueprint_values",
+  "payload": {
+    "source_asset_path": "/Game/A/A.A",
+    "target_asset": { "asset_path": "/Game/B/B.B" },
+    "class_defaults": [
+      { "name": "WeaponNameTag" }
+    ]
+  }
+}
+```
+
+组件字段复制：
+
+```json
+{
+  "op": "copy_component_properties",
+  "component_name": "StateEquip",
+  "target_kind": "native_template | scs_inherited_override | own_scs_template",
+  "properties": [
+    { "name": "LooseGameplayTags" }
+  ]
+}
+```
+
+读取 source 组件时不会创建 override。写入 target 时才按 `target_kind`
+解析真实写入位置：
+
+| target_kind | source 读取 | target 写入 |
+|---|---|---|
+| `native_template` | native component template | native component template |
+| `own_scs_template` | 当前蓝图 SCS template | 当前蓝图 SCS template |
+| `scs_inherited_override` | live effective SCS template，副作用为 0 | 当前蓝图 ICH override template，不存在则创建 |
+
+写入后会重新读取 target live 对象做 post-write / post-compile 验证。
+
+#### `copy_blueprint_live_overrides`
+
+更高层的蓝图配置复刻原子接口。调用方只提供 source / target / redirects，
+C++ 会从 source live Blueprint 读取真实结构并自动生成本次复制计划：
+
+- CDO：只复制 `CPF_Edit`、非 transient / deprecated / delegate、且相对父类不同的字段。
+- CDO component object refs：跳过，例如 `RootComponent`、`SkinComponent`、native component 指针。
+- components：读取 owned SCS、inherited SCS、native components；只复制相对父模板不同的属性。
+- 写入目标由 C++ 按组件来源决定：`own_scs_template`、`scs_inherited_override`、`native_template`。
+- 属性值仍由 C++ 从 source live UObject `ExportTextItem` 读取，meta 只可作为缓存/观察结果。
+
+```json
+{
+  "task_type": "copy_blueprint_live_overrides",
+  "payload": {
+    "source_asset_path": "/Game/A/A.A",
+    "target_asset": { "asset_path": "/Game/B/B.B" },
+    "redirects": [
+      { "from": "/Game/A/A.A", "to": "/Game/B/B.B" },
+      { "from": "/Game/A/A.A_C", "to": "/Game/B/B.B_C" }
+    ]
+  }
+}
 ```
 
 属性 `value` 接受的格式：
@@ -122,6 +240,16 @@ sample:    Samples/modify_blueprint_defaults.json
 | `set` | 数组 |
 | `map` | 对象 `{key:value, ...}` 或数组 `[{key, value}]` |
 | `struct` | 对象，字段名作为键，字段值递归遵循同样规则 |
+| `import_text` | UE `FProperty::ExportTextItem` 文本，写入时直接交给目标 `FProperty::ImportText` |
+
+`import_text` 用于复杂 GAS / 项目自定义结构体、嵌套 Map/Array/Struct
+等不适合从 JSON 反推 ImportText 的字段。Phase 4 meta 会随每个导出
+属性写出 `import_text`，编排器可在重放到 CopyQ 前对文本里的资产路径
+做 Q -> CopyQ 替换。
+
+`modify_blueprint_defaults` 与 `modify_blueprint_components` 也可携带
+`payload.redirects[]`。当属性类型为 `import_text` 时，写入器会在
+`ImportText` 前按 redirects 替换完整对象路径与 package 前缀。
 
 ### 模板任务
 
@@ -192,6 +320,15 @@ generate_audit_report     可选 report.{path, format}
 ```
 <PluginDir>/Saved/BlueprintMetaCache/<package-path>.meta.json
 ```
+
+每个导出的 `class_defaults[]` 与组件 `properties[]` 条目包含：
+
+```
+name / ue_type / value / import_text / editable / blueprint_visible / differs_from_parent
+```
+
+`value` 受 `max_property_depth` 与 `max_array_elements` 限制，可能出现
+`truncated:true`；`import_text` 是 UE 原生属性文本，不受 JSON 深度截断影响。
 
 `payload.analysis` 通用键：
 
@@ -288,6 +425,21 @@ Asset Registry 目录枚举。artifact 写到
   "task_type": "list_directory_assets",
   "payload": {
     "directory_path": "/Game/PaperMan/CyAbilities/Yugiri/Q",
+    "recursive": true
+  }
+}
+```
+
+#### `delete_directory_assets`
+
+按 Asset Registry 枚举并删除目录下资产。用于任务前清理目标目录，当前
+只接受 `/Game/...` package path，并继续受 `allowed_asset_roots` 白名单约束。
+
+```json
+{
+  "task_type": "delete_directory_assets",
+  "payload": {
+    "directory_path": "/Game/PaperMan/CyAbilities/Yugiri/CopyQ",
     "recursive": true
   }
 }

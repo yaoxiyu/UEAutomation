@@ -5,6 +5,7 @@
 #include "Domain/PropertySnapshotService.h"
 #include "Engine/Blueprint.h"
 #include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/InheritableComponentHandler.h"
 #include "Engine/SCS_Node.h"
 #include "Engine/SimpleConstructionScript.h"
 #include "Protocol/AutomationProtocolTypes.h"
@@ -46,9 +47,10 @@ namespace
 
     TSharedRef<FJsonObject> ExportComponentObject(
         UActorComponent* Template,
+        UActorComponent* ParentTemplate,
         const FString& ComponentName,
         const FString& AttachParent,
-        bool bInherited,
+        const FString& OwnerKind,
         const FAutomationAnalysisOptions& Options,
         const TArray<FString>& DeniedExportNames,
         FAutomationTaskResult& OutResult)
@@ -57,7 +59,10 @@ namespace
         CompObject->SetStringField(TEXT("component_name"), ComponentName);
         CompObject->SetStringField(TEXT("component_class"), Template ? Template->GetClass()->GetPathName() : FString());
         CompObject->SetStringField(TEXT("attach_parent"), AttachParent);
+        CompObject->SetStringField(TEXT("owner_kind"), OwnerKind);
+        const bool bInherited = OwnerKind == TEXT("scs_inherited") || OwnerKind == TEXT("native");
         CompObject->SetBoolField(TEXT("inherited"), bInherited);
+        CompObject->SetBoolField(TEXT("has_inheritable_override"), false);
 
         if (USceneComponent* SceneTemplate = Cast<USceneComponent>(Template))
         {
@@ -69,7 +74,11 @@ namespace
         {
             FPropertySnapshotService Snapshot;
             Snapshot.SetDeniedExportNames(DeniedExportNames);
-            if (UActorComponent* ParentTemplate = Template->GetClass()->GetDefaultObject<UActorComponent>())
+            if (!ParentTemplate)
+            {
+                ParentTemplate = Template->GetClass()->GetDefaultObject<UActorComponent>();
+            }
+            if (ParentTemplate)
             {
                 Snapshot.SetParentTargetForDiff(ParentTemplate);
             }
@@ -113,15 +122,69 @@ namespace
             }
 
             KnownComponentNames.Add(ComponentName);
+            UActorComponent* ParentTemplate = nullptr;
+            if (UClass* SuperClass = CDO->GetClass()->GetSuperClass())
+            {
+                if (UObject* SuperCDO = SuperClass->GetDefaultObject())
+                {
+                    FProperty* SuperProperty = SuperCDO->GetClass()->FindPropertyByName(Property->GetFName());
+                    if (FObjectPropertyBase* SuperObjectProperty = CastField<FObjectPropertyBase>(SuperProperty))
+                    {
+                        ParentTemplate = Cast<UActorComponent>(SuperObjectProperty->GetObjectPropertyValue_InContainer(SuperCDO));
+                    }
+                }
+            }
+
             Components.Add(MakeShared<FJsonValueObject>(
-                ExportComponentObject(Template, ComponentName, FString(), true, Options, DeniedExportNames, OutResult)));
+                ExportComponentObject(Template, ParentTemplate, ComponentName, FString(), TEXT("native"), Options, DeniedExportNames, OutResult)));
+        }
+
+        TArray<UObject*> DefaultSubobjects;
+        CDO->GetDefaultSubobjects(DefaultSubobjects);
+        for (UObject* DefaultSubobject : DefaultSubobjects)
+        {
+            UActorComponent* Template = Cast<UActorComponent>(DefaultSubobject);
+            if (!Template)
+            {
+                continue;
+            }
+
+            const FString ComponentName = Template->GetName();
+            if (ComponentName.IsEmpty() || KnownComponentNames.Contains(ComponentName))
+            {
+                continue;
+            }
+
+            KnownComponentNames.Add(ComponentName);
+
+            UActorComponent* ParentTemplate = nullptr;
+            if (UClass* SuperClass = CDO->GetClass()->GetSuperClass())
+            {
+                if (UObject* SuperCDO = SuperClass->GetDefaultObject())
+                {
+                    TArray<UObject*> ParentDefaultSubobjects;
+                    SuperCDO->GetDefaultSubobjects(ParentDefaultSubobjects);
+                    for (UObject* ParentDefaultSubobject : ParentDefaultSubobjects)
+                    {
+                        UActorComponent* Candidate = Cast<UActorComponent>(ParentDefaultSubobject);
+                        if (Candidate && Candidate->GetName().Equals(ComponentName, ESearchCase::IgnoreCase))
+                        {
+                            ParentTemplate = Candidate;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            Components.Add(MakeShared<FJsonValueObject>(
+                ExportComponentObject(Template, ParentTemplate, ComponentName, FString(), TEXT("native"), Options, DeniedExportNames, OutResult)));
         }
     }
 
     void ExportSCSComponents(
         UBlueprint* OwnerBlueprint,
         UBlueprintGeneratedClass* TargetGeneratedClass,
-        bool bInherited,
+        const FString& OwnerKind,
         const FAutomationAnalysisOptions& Options,
         const TArray<FString>& DeniedExportNames,
         TSet<FString>& KnownComponentNames,
@@ -137,6 +200,10 @@ namespace
         for (USCS_Node* Node : AllNodes)
         {
             if (!Node)
+            {
+                continue;
+            }
+            if (Node->GetSCS() != OwnerBlueprint->SimpleConstructionScript)
             {
                 continue;
             }
@@ -158,14 +225,47 @@ namespace
                 Template = Node->ComponentClass->GetDefaultObject<UActorComponent>();
             }
 
+            UActorComponent* ParentTemplate = nullptr;
+            bool bHasInheritableOverride = false;
+            if (OwnerKind == TEXT("scs_inherited"))
+            {
+                UBlueprintGeneratedClass* ParentGeneratedClass = TargetGeneratedClass
+                    ? Cast<UBlueprintGeneratedClass>(TargetGeneratedClass->GetSuperClass())
+                    : nullptr;
+                ParentTemplate = ParentGeneratedClass ? Node->GetActualComponentTemplate(ParentGeneratedClass) : nullptr;
+                if (!ParentTemplate)
+                {
+                    UBlueprintGeneratedClass* OwnerGeneratedClass = Cast<UBlueprintGeneratedClass>(OwnerBlueprint->GeneratedClass);
+                    ParentTemplate = OwnerGeneratedClass ? Node->GetActualComponentTemplate(OwnerGeneratedClass) : nullptr;
+                    if (!ParentTemplate)
+                    {
+                        ParentTemplate = Node->ComponentTemplate;
+                    }
+                }
+
+                if (TargetGeneratedClass)
+                {
+                    const FComponentKey ComponentKey(Node);
+                    if (UInheritableComponentHandler* Handler = TargetGeneratedClass->GetInheritableComponentHandler(false))
+                    {
+                        if (Handler->GetOverridenComponentTemplate(ComponentKey))
+                        {
+                            bHasInheritableOverride = true;
+                        }
+                    }
+                }
+            }
+
             FString AttachParent;
             if (USCS_Node* ParentNode = OwnerBlueprint->SimpleConstructionScript->FindParentNode(Node))
             {
                 AttachParent = ParentNode->GetVariableName().ToString();
             }
 
-            Components.Add(MakeShared<FJsonValueObject>(
-                ExportComponentObject(Template, ComponentName, AttachParent, bInherited, Options, DeniedExportNames, OutResult)));
+            const TSharedRef<FJsonObject> ComponentObject =
+                ExportComponentObject(Template, ParentTemplate, ComponentName, AttachParent, OwnerKind, Options, DeniedExportNames, OutResult);
+            ComponentObject->SetBoolField(TEXT("has_inheritable_override"), bHasInheritableOverride);
+            Components.Add(MakeShared<FJsonValueObject>(ComponentObject));
         }
     }
 
@@ -189,7 +289,7 @@ namespace
             UBlueprint* ParentBlueprint = Cast<UBlueprint>(ParentClass->ClassGeneratedBy);
             if (ParentBlueprint)
             {
-                ExportSCSComponents(ParentBlueprint, TargetGeneratedClass, true, Options, DeniedExportNames, KnownComponentNames, Components, OutResult);
+                ExportSCSComponents(ParentBlueprint, TargetGeneratedClass, TEXT("scs_inherited"), Options, DeniedExportNames, KnownComponentNames, Components, OutResult);
             }
             ParentClass = ParentClass->GetSuperClass();
         }
@@ -273,7 +373,7 @@ bool FBlueprintSnapshotExporter::ExportBlueprintSnapshot(
     if (Options.bIncludeComponents)
     {
         UBlueprintGeneratedClass* BlueprintGeneratedClass = Cast<UBlueprintGeneratedClass>(GeneratedClass);
-        ExportSCSComponents(Blueprint, BlueprintGeneratedClass, false, Options, DeniedExportNames, KnownComponentNames, Components, OutResult);
+        ExportSCSComponents(Blueprint, BlueprintGeneratedClass, TEXT("scs_owned"), Options, DeniedExportNames, KnownComponentNames, Components, OutResult);
         ExportInheritedSCSComponents(Blueprint, BlueprintGeneratedClass, Options, DeniedExportNames, KnownComponentNames, Components, OutResult);
         if (GeneratedClass)
         {

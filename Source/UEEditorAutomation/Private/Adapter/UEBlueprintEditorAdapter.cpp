@@ -11,6 +11,8 @@
 #include "Editor/EditorEngine.h"
 #include "FileHelpers.h"
 #include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/InheritableComponentHandler.h"
+#include "Kismet2/ComponentEditorUtils.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/PackageName.h"
@@ -98,7 +100,7 @@ bool FUEBlueprintEditorAdapter::AddComponentNode(UBlueprint* Blueprint, UClass* 
         return false;
     }
 
-    if (FindSCSNode(Blueprint, ComponentName))
+    if (FindSCSNodeInHierarchy(Blueprint, ComponentName))
     {
         OutError = FString::Printf(TEXT("Duplicate component name '%s'."), *ComponentName);
         return false;
@@ -153,7 +155,11 @@ bool FUEBlueprintEditorAdapter::RemoveComponentNode(UBlueprint* Blueprint, const
 UObject* FUEBlueprintEditorAdapter::GetComponentTemplate(UBlueprint* Blueprint, const FString& ComponentName, const FString& LookupPolicy, FString& OutError)
 {
     const FString Policy = LookupPolicy.IsEmpty() ? TEXT("scs_first") : LookupPolicy.ToLower();
-    if (Policy != TEXT("scs_first") && Policy != TEXT("native_first") && Policy != TEXT("scs_only") && Policy != TEXT("native_only"))
+    if (Policy != TEXT("scs_first")
+        && Policy != TEXT("native_first")
+        && Policy != TEXT("scs_only")
+        && Policy != TEXT("native_only")
+        && Policy != TEXT("scs_inherited_override"))
     {
         OutError = FString::Printf(TEXT("Unsupported component_lookup_policy '%s'."), *LookupPolicy);
         return nullptr;
@@ -163,6 +169,17 @@ UObject* FUEBlueprintEditorAdapter::GetComponentTemplate(UBlueprint* Blueprint, 
     {
         if (UObject* NativeTemplate = FindNativeComponentTemplate(Blueprint, ComponentName))
         {
+            if (const UActorComponent* NativeComponent = Cast<UActorComponent>(NativeTemplate))
+            {
+                if (NativeComponent->CreationMethod == EComponentCreationMethod::Native
+                    && !FComponentEditorUtils::GetPropertyForEditableNativeComponent(NativeComponent))
+                {
+                    OutError = FString::Printf(
+                        TEXT("Native component '%s' is not editable as Blueprint defaults. UE requires native components to be referenced by an editor-visible UPROPERTY before component template overrides can persist."),
+                        *ComponentName);
+                    return nullptr;
+                }
+            }
             return NativeTemplate;
         }
         if (Policy == TEXT("native_only"))
@@ -172,7 +189,13 @@ UObject* FUEBlueprintEditorAdapter::GetComponentTemplate(UBlueprint* Blueprint, 
         }
     }
 
-    USCS_Node* Node = Policy == TEXT("native_only") ? nullptr : FindSCSNodeInHierarchy(Blueprint, ComponentName);
+    USCS_Node* Node = nullptr;
+    if (Policy != TEXT("native_only"))
+    {
+        Node = Policy == TEXT("scs_only")
+            ? FindSCSNode(Blueprint, ComponentName)
+            : FindSCSNodeInHierarchy(Blueprint, ComponentName);
+    }
     if (!Node)
     {
         if (Policy == TEXT("scs_first"))
@@ -191,6 +214,43 @@ UObject* FUEBlueprintEditorAdapter::GetComponentTemplate(UBlueprint* Blueprint, 
     if (Blueprint && Blueprint->GeneratedClass)
     {
         BlueprintGeneratedClass = Cast<UBlueprintGeneratedClass>(Blueprint->GeneratedClass.Get());
+    }
+
+    if (Policy == TEXT("scs_inherited_override"))
+    {
+        if (!BlueprintGeneratedClass)
+        {
+            OutError = FString::Printf(TEXT("Blueprint generated class is invalid for inherited component '%s'."), *ComponentName);
+            return nullptr;
+        }
+
+        if (Blueprint->SimpleConstructionScript && Node->GetSCS() == Blueprint->SimpleConstructionScript)
+        {
+            UObject* OwnTemplate = Node->GetActualComponentTemplate(BlueprintGeneratedClass);
+            return OwnTemplate ? OwnTemplate : Node->ComponentTemplate;
+        }
+
+        UInheritableComponentHandler* Handler = Blueprint->GetInheritableComponentHandler(true);
+        if (!Handler)
+        {
+            OutError = FString::Printf(TEXT("Failed to create inheritable component handler for '%s'."), *ComponentName);
+            return nullptr;
+        }
+
+        const FComponentKey ComponentKey(Node);
+        UObject* Template = Handler->GetOverridenComponentTemplate(ComponentKey);
+        if (!Template)
+        {
+            Blueprint->Modify();
+            Handler->Modify();
+            Template = Handler->CreateOverridenComponentTemplate(ComponentKey);
+        }
+        if (!Template)
+        {
+            OutError = FString::Printf(TEXT("Failed to create inherited component override template '%s'."), *ComponentName);
+            return nullptr;
+        }
+        return Template;
     }
 
     UObject* Template = BlueprintGeneratedClass ? Node->GetActualComponentTemplate(BlueprintGeneratedClass) : nullptr;
@@ -256,15 +316,16 @@ bool FUEBlueprintEditorAdapter::SaveAsset(UObject* Asset, FString& OutError)
     }
 
     UPackage* Package = Asset->GetOutermost();
+    Package->FullyLoad();
     const FString PackageFilename = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
 
 #if ENGINE_MAJOR_VERSION >= 5
     FSavePackageArgs SaveArgs;
     SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
     SaveArgs.SaveFlags = SAVE_NoError;
-    const bool bSaved = UPackage::SavePackage(Package, Asset, *PackageFilename, SaveArgs);
+    const bool bSaved = UPackage::SavePackage(Package, nullptr, *PackageFilename, SaveArgs);
 #else
-    const bool bSaved = UPackage::SavePackage(Package, Asset, RF_Public | RF_Standalone, *PackageFilename, GError, nullptr, false, true, SAVE_NoError, nullptr);
+    const bool bSaved = UPackage::SavePackage(Package, nullptr, RF_Public | RF_Standalone, *PackageFilename, GError, nullptr, false, true, SAVE_NoError, nullptr);
 #endif
 
     if (!bSaved)
@@ -319,6 +380,22 @@ UObject* FUEBlueprintEditorAdapter::FindNativeComponentTemplate(UBlueprint* Blue
         }
     }
 
+    TArray<UObject*> DefaultSubobjects;
+    CDO->GetDefaultSubobjects(DefaultSubobjects);
+    for (UObject* DefaultSubobject : DefaultSubobjects)
+    {
+        UActorComponent* Component = Cast<UActorComponent>(DefaultSubobject);
+        if (!Component)
+        {
+            continue;
+        }
+
+        if (Component->GetName().Equals(ComponentName, ESearchCase::IgnoreCase))
+        {
+            return Component;
+        }
+    }
+
     return nullptr;
 }
 
@@ -332,7 +409,9 @@ USCS_Node* FUEBlueprintEditorAdapter::FindSCSNode(UBlueprint* Blueprint, const F
     const TArray<USCS_Node*> Nodes = Blueprint->SimpleConstructionScript->GetAllNodes();
     for (USCS_Node* Node : Nodes)
     {
-        if (Node && Node->GetVariableName().ToString() == ComponentName)
+        if (Node
+            && Node->GetSCS() == Blueprint->SimpleConstructionScript
+            && Node->GetVariableName().ToString() == ComponentName)
         {
             return Node;
         }

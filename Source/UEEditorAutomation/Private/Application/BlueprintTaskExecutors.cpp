@@ -277,6 +277,148 @@ bool FModifyBlueprintDefaultsTaskExecutor::Execute(const FAutomationTaskRequest&
     return Service->ModifyBlueprintDefaults(Request, OutResult);
 }
 
+FCopyLiveBlueprintValuesTaskExecutor::FCopyLiveBlueprintValuesTaskExecutor(const TSharedRef<FBlueprintAutomationService>& InService)
+    : FBlueprintTaskExecutorBase(InService)
+{
+}
+
+FString FCopyLiveBlueprintValuesTaskExecutor::GetTaskType() const
+{
+    return TEXT("copy_live_blueprint_values");
+}
+
+bool FCopyLiveBlueprintValuesTaskExecutor::Validate(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
+{
+    if (Request.SourceAssetPath.IsEmpty())
+    {
+        OutResult.AddError(TEXT("MissingRequiredField"), TEXT("source_asset_path is required."), TEXT("payload.source_asset_path"));
+        return false;
+    }
+    if (Request.TargetAsset.AssetPath.IsEmpty())
+    {
+        OutResult.AddError(TEXT("MissingRequiredField"), TEXT("target_asset.asset_path is required."), TEXT("payload.target_asset.asset_path"));
+        return false;
+    }
+    if (Request.ClassDefaults.Num() == 0 && Request.Operations.Num() == 0)
+    {
+        OutResult.AddError(TEXT("MissingRequiredField"), TEXT("class_defaults or operations must contain at least one live value copy request."), TEXT("payload"));
+        return false;
+    }
+
+    for (int32 Index = 0; Index < Request.ClassDefaults.Num(); ++Index)
+    {
+        if (Request.ClassDefaults[Index].Name.IsEmpty())
+        {
+            OutResult.AddError(TEXT("MissingRequiredField"), TEXT("property name is required."), FString::Printf(TEXT("payload.class_defaults[%d].name"), Index));
+            return false;
+        }
+    }
+
+    for (int32 Index = 0; Index < Request.Operations.Num(); ++Index)
+    {
+        const FAutomationOperation& Operation = Request.Operations[Index];
+        const FString FieldPrefix = FString::Printf(TEXT("payload.operations[%d]"), Index);
+        if (Operation.Op != TEXT("copy_component_properties") && Operation.Op != TEXT("update_component_properties"))
+        {
+            OutResult.AddError(TEXT("InvalidOperation"), FString::Printf(TEXT("Unsupported live copy operation '%s'."), *Operation.Op), FieldPrefix + TEXT(".op"));
+            return false;
+        }
+        if (!ValidateComponentName(Operation.Component, OutResult, FieldPrefix))
+        {
+            return false;
+        }
+        if (Operation.Properties.Num() == 0)
+        {
+            OutResult.AddError(TEXT("MissingRequiredField"), TEXT("properties must contain at least one property name."), FieldPrefix + TEXT(".properties"));
+            return false;
+        }
+        for (int32 PropertyIndex = 0; PropertyIndex < Operation.Properties.Num(); ++PropertyIndex)
+        {
+            if (Operation.Properties[PropertyIndex].Name.IsEmpty())
+            {
+                OutResult.AddError(TEXT("MissingRequiredField"), TEXT("property name is required."), FString::Printf(TEXT("%s.properties[%d].name"), *FieldPrefix, PropertyIndex));
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+bool FCopyLiveBlueprintValuesTaskExecutor::Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
+{
+    return Service->CopyLiveBlueprintValues(Request, OutResult);
+}
+
+FCopyBlueprintLiveOverridesTaskExecutor::FCopyBlueprintLiveOverridesTaskExecutor(const TSharedRef<FBlueprintAutomationService>& InService)
+    : FBlueprintTaskExecutorBase(InService)
+{
+}
+
+FString FCopyBlueprintLiveOverridesTaskExecutor::GetTaskType() const
+{
+    return TEXT("copy_blueprint_live_overrides");
+}
+
+bool FCopyBlueprintLiveOverridesTaskExecutor::Validate(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
+{
+    if (Request.SourceAssetPath.IsEmpty())
+    {
+        OutResult.AddError(TEXT("MissingRequiredField"), TEXT("source_asset_path is required."), TEXT("payload.source_asset_path"));
+        return false;
+    }
+    if (Request.TargetAsset.AssetPath.IsEmpty())
+    {
+        OutResult.AddError(TEXT("MissingRequiredField"), TEXT("target_asset.asset_path is required."), TEXT("payload.target_asset.asset_path"));
+        return false;
+    }
+    return true;
+}
+
+bool FCopyBlueprintLiveOverridesTaskExecutor::Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
+{
+    return Service->CopyBlueprintLiveOverrides(Request, OutResult);
+}
+
+FDiagnoseBlueprintPropertyPersistenceTaskExecutor::FDiagnoseBlueprintPropertyPersistenceTaskExecutor(const TSharedRef<FBlueprintAutomationService>& InService)
+    : FBlueprintTaskExecutorBase(InService)
+{
+}
+
+FString FDiagnoseBlueprintPropertyPersistenceTaskExecutor::GetTaskType() const
+{
+    return TEXT("diagnose_blueprint_property_persistence");
+}
+
+bool FDiagnoseBlueprintPropertyPersistenceTaskExecutor::Validate(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
+{
+    if (Request.TargetAsset.AssetPath.IsEmpty())
+    {
+        OutResult.AddError(TEXT("MissingRequiredField"), TEXT("target_asset.asset_path is required."), TEXT("payload.target_asset.asset_path"));
+        return false;
+    }
+
+    const bool bHasCDOProperty = Request.ClassDefaults.Num() == 1;
+    const bool bHasComponentProperty = Request.Operations.Num() == 1
+        && Request.Operations[0].Op == TEXT("update_component_properties")
+        && !Request.Operations[0].Component.ComponentName.IsEmpty()
+        && Request.Operations[0].Properties.Num() == 1;
+    if (!bHasCDOProperty && !bHasComponentProperty)
+    {
+        OutResult.AddError(
+            TEXT("MissingRequiredField"),
+            TEXT("Provide exactly one class_defaults property or one update_component_properties operation with exactly one property."),
+            TEXT("payload"));
+        return false;
+    }
+    return true;
+}
+
+bool FDiagnoseBlueprintPropertyPersistenceTaskExecutor::Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
+{
+    return Service->DiagnoseBlueprintPropertyPersistence(Request, OutResult);
+}
+
 FCreateBlueprintFromTemplateTaskExecutor::FCreateBlueprintFromTemplateTaskExecutor(const TSharedRef<FBlueprintAutomationService>& InService)
     : FBlueprintTaskExecutorBase(InService)
 {

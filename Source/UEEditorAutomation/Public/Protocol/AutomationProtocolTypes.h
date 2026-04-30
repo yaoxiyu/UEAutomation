@@ -104,6 +104,7 @@ struct FAutomationOperation
 {
     FString Op;
     FString ComponentLookupPolicy;
+    FString TargetKind;
     FAutomationComponentSpec Component;
     TArray<FAutomationPropertyValue> Properties;
 };
@@ -177,6 +178,8 @@ struct FAutomationTaskRequest
 struct FAutomationAssetOutput
 {
     FString AssetPath;
+    FString PackageName;
+    FString PackageFilePath;
     FString AssetName;
     FString AssetType;
 };
@@ -190,6 +193,16 @@ struct FAutomationArtifactOutput
     FString ParentCppMd5;
 };
 
+struct FAutomationFieldResult
+{
+    FString Path;
+    FString Status;
+    FString WriteTarget;
+    FString WriteMode;
+    FString Reason;
+    FString Message;
+};
+
 struct FAutomationTaskResult
 {
     int32 ProtocolVersion = 1;
@@ -199,6 +212,7 @@ struct FAutomationTaskResult
     FString Status = TEXT("failed");
     TArray<FAutomationAssetOutput> AssetOutputs;
     TArray<FAutomationArtifactOutput> Artifacts;
+    TArray<FAutomationFieldResult> FieldResults;
     TArray<FString> Warnings;
     TArray<FAutomationError> Errors;
     TArray<FString> LogLines;
@@ -208,6 +222,7 @@ struct FAutomationTaskResult
     void AddError(const FString& Code, const FString& Message, const FString& Field = FString());
     void AddWarning(const FString& Message);
     void AddLog(const FString& Message);
+    void AddFieldResult(const FString& Path, const FString& Status, const FString& WriteTarget, const FString& WriteMode, const FString& Reason = FString(), const FString& Message = FString());
 };
 
 class FAutomationProtocolJson

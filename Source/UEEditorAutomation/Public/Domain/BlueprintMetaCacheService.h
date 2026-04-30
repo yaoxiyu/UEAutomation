@@ -7,7 +7,7 @@ struct FAutomationAnalysisOptions;
 
 namespace UEAutomation { namespace MetaCache
 {
-    static constexpr int32 CurrentSchemaVersion = 1;
+    static constexpr int32 CurrentSchemaVersion = 2;
 
     extern UEEDITORAUTOMATION_API const TCHAR* StatusHit;
     extern UEEDITORAUTOMATION_API const TCHAR* StatusMissNoCache;

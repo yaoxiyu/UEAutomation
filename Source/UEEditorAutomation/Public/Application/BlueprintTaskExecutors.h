@@ -38,6 +38,33 @@ public:
     virtual bool Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
 };
 
+class FCopyLiveBlueprintValuesTaskExecutor : public FBlueprintTaskExecutorBase
+{
+public:
+    explicit FCopyLiveBlueprintValuesTaskExecutor(const TSharedRef<FBlueprintAutomationService>& InService);
+    virtual FString GetTaskType() const override;
+    virtual bool Validate(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+    virtual bool Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+};
+
+class FCopyBlueprintLiveOverridesTaskExecutor : public FBlueprintTaskExecutorBase
+{
+public:
+    explicit FCopyBlueprintLiveOverridesTaskExecutor(const TSharedRef<FBlueprintAutomationService>& InService);
+    virtual FString GetTaskType() const override;
+    virtual bool Validate(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+    virtual bool Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+};
+
+class FDiagnoseBlueprintPropertyPersistenceTaskExecutor : public FBlueprintTaskExecutorBase
+{
+public:
+    explicit FDiagnoseBlueprintPropertyPersistenceTaskExecutor(const TSharedRef<FBlueprintAutomationService>& InService);
+    virtual FString GetTaskType() const override;
+    virtual bool Validate(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+    virtual bool Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+};
+
 class FCreateBlueprintFromTemplateTaskExecutor : public FBlueprintTaskExecutorBase
 {
 public:

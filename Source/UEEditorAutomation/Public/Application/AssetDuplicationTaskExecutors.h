@@ -36,3 +36,11 @@ public:
     virtual FString GetTaskType() const override { return TEXT("list_directory_assets"); }
     virtual bool Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
 };
+
+class FDeleteDirectoryAssetsTaskExecutor : public FAssetDuplicationTaskExecutorBase
+{
+public:
+    using FAssetDuplicationTaskExecutorBase::FAssetDuplicationTaskExecutorBase;
+    virtual FString GetTaskType() const override { return TEXT("delete_directory_assets"); }
+    virtual bool Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+};

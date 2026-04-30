@@ -16,9 +16,11 @@
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
+#include "ObjectTools.h"
 #include "Protocol/AutomationProtocolTypes.h"
 #include "Serialization/ArchiveReplaceObjectRef.h"
 #include "UObject/Package.h"
+#include "UObject/SavePackage.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/UnrealType.h"
 #include "UObject/UObjectGlobals.h"
@@ -47,6 +49,35 @@ namespace
     {
         FAssetRegistryModule& Module = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
         return Module.Get().GetAssetByObjectPath(*ObjectPath).IsValid();
+    }
+
+    bool SaveLoadedAssetPackage(UObject* Asset, FString& OutError)
+    {
+        if (!Asset || !Asset->GetOutermost())
+        {
+            OutError = TEXT("Asset or package is invalid.");
+            return false;
+        }
+
+        UPackage* Package = Asset->GetOutermost();
+        Package->FullyLoad();
+        const FString PackageFilename = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+
+#if ENGINE_MAJOR_VERSION >= 5
+        FSavePackageArgs SaveArgs;
+        SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+        SaveArgs.SaveFlags = SAVE_NoError;
+        const bool bSaved = UPackage::SavePackage(Package, Asset, *PackageFilename, SaveArgs);
+#else
+        const bool bSaved = UPackage::SavePackage(Package, Asset, RF_Public | RF_Standalone, *PackageFilename, GError, nullptr, false, true, SAVE_NoError, nullptr);
+#endif
+
+        if (!bSaved)
+        {
+            OutError = FString::Printf(TEXT("Failed to save asset '%s' to '%s'."), *Asset->GetPathName(), *PackageFilename);
+            return false;
+        }
+        return true;
     }
 
     void AddRedirectIfValid(TMap<UObject*, UObject*>& ReplacementMap, UObject* From, UObject* To)
@@ -176,7 +207,7 @@ namespace
                 FString NewPath;
                 if (TryRewritePathByPrefix(CurrentPath, PrefixRedirects, NewPath))
                 {
-                    FSoftObjectPtr NewValue(FSoftObjectPath(NewPath));
+                    FSoftObjectPtr NewValue{FSoftObjectPath(NewPath)};
                     SoftObjectProperty->SetPropertyValue(ValuePtr, NewValue);
                     ++ReplacedCount;
                 }
@@ -190,7 +221,7 @@ namespace
                 FString NewPath;
                 if (TryRewritePathByPrefix(CurrentPath, PrefixRedirects, NewPath))
                 {
-                    FSoftObjectPtr NewValue(FSoftObjectPath(NewPath));
+                    FSoftObjectPtr NewValue{FSoftObjectPath(NewPath)};
                     SoftClassProperty->SetPropertyValue(ValuePtr, NewValue);
                     ++ReplacedCount;
                 }
@@ -260,9 +291,12 @@ bool FAssetDuplicationService::DuplicateAsset(const FAutomationTaskRequest& Requ
         Package->MarkPackageDirty();
         FAssetRegistryModule::AssetCreated(Duplicated);
 
-        TArray<UPackage*> Packages;
-        Packages.Add(Package);
-        FEditorFileUtils::PromptForCheckoutAndSave(Packages, /*bCheckDirty*/false, /*bPromptToSave*/false);
+        FString SaveError;
+        if (!SaveLoadedAssetPackage(Duplicated, SaveError))
+        {
+            OutResult.AddError(TEXT("AssetSaveFailed"), SaveError);
+            return false;
+        }
     }
 
     FAutomationAssetOutput Output;
@@ -364,16 +398,20 @@ bool FAssetDuplicationService::RedirectAssetReferences(const FAutomationTaskRequ
             OutResult.AddLog(FString::Printf(TEXT("RedirectAssetReferences: cdo_subobject_prefix_replaced=%d"), PrefixRewriteCount));
         }
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(TargetBP);
-        FKismetEditorUtilities::CompileBlueprint(TargetBP);
+        if (Request.Execution.bCompileAfterCreate || Request.PostActions.Contains(TEXT("compile_blueprint")))
+        {
+            const double CompileStartSeconds = FPlatformTime::Seconds();
+            FKismetEditorUtilities::CompileBlueprint(TargetBP);
+            OutResult.Metrics.CompileDurationMs += static_cast<int64>((FPlatformTime::Seconds() - CompileStartSeconds) * 1000.0);
+        }
     }
 
     Target->MarkPackageDirty();
-    UPackage* Package = Target->GetOutermost();
-    if (Package)
+    FString SaveError;
+    if (!SaveLoadedAssetPackage(Target, SaveError))
     {
-        TArray<UPackage*> Packages;
-        Packages.Add(Package);
-        FEditorFileUtils::PromptForCheckoutAndSave(Packages, false, false);
+        OutResult.AddError(TEXT("AssetSaveFailed"), SaveError);
+        return false;
     }
 
     FAutomationAssetOutput Output;
@@ -479,5 +517,58 @@ bool FAssetDuplicationService::ListDirectoryAssets(const FAutomationTaskRequest&
     OutResult.AddLog(FString::Printf(TEXT("ListDirectoryAssets: %d assets under %s"), ItemsArray.Num(), *PackagePath));
     OutResult.bSuccess = true;
     OutResult.Status = TEXT("succeeded");
+    return true;
+}
+
+bool FAssetDuplicationService::DeleteDirectoryAssets(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
+{
+    if (Request.DirectoryPath.IsEmpty())
+    {
+        OutResult.AddError(TEXT("MissingRequiredField"), TEXT("directory_path is required"), TEXT("payload.directory_path"));
+        return false;
+    }
+
+    FString PackagePath = Request.DirectoryPath;
+    if (PackagePath.EndsWith(TEXT("/")))
+    {
+        PackagePath.LeftChopInline(1);
+    }
+    if (!PackagePath.StartsWith(TEXT("/Game/")))
+    {
+        OutResult.AddError(TEXT("InvalidDirectoryPath"), TEXT("delete_directory_assets only supports /Game package paths."), TEXT("payload.directory_path"));
+        return false;
+    }
+
+    FAssetRegistryModule& Module = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+    IAssetRegistry& Registry = Module.Get();
+    Registry.ScanPathsSynchronous({ PackagePath }, /*bForceRescan*/true);
+
+    TArray<FAssetData> Assets;
+    Registry.GetAssetsByPath(FName(*PackagePath), Assets, Request.bRecursive, /*bIncludeOnlyOnDiskAssets*/false);
+    Assets.Sort([](const FAssetData& A, const FAssetData& B)
+    {
+        return A.ObjectPath.ToString() > B.ObjectPath.ToString();
+    });
+
+    if (Assets.Num() == 0)
+    {
+        OutResult.AddLog(FString::Printf(TEXT("DeleteDirectoryAssets: no assets under %s"), *PackagePath));
+        return true;
+    }
+
+    OutResult.AddLog(FString::Printf(TEXT("DeleteDirectoryAssets: deleting %d assets under %s"), Assets.Num(), *PackagePath));
+    const int32 DeletedCount = ObjectTools::DeleteAssets(Assets, /*bShowConfirmation*/false);
+    OutResult.AddLog(FString::Printf(TEXT("DeleteDirectoryAssets: deleted %d/%d assets"), DeletedCount, Assets.Num()));
+
+    if (DeletedCount != Assets.Num())
+    {
+        OutResult.AddError(
+            TEXT("DeleteDirectoryAssetsIncomplete"),
+            FString::Printf(TEXT("Deleted %d of %d assets under %s."), DeletedCount, Assets.Num(), *PackagePath),
+            TEXT("payload.directory_path"));
+        return false;
+    }
+
+    Registry.ScanPathsSynchronous({ PackagePath }, /*bForceRescan*/true);
     return true;
 }

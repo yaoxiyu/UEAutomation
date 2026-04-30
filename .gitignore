@@ -8,6 +8,7 @@ DerivedDataCache/
 .vs/
 .vscode/
 .idea/
+.claude/
 *.sln
 *.suo
 *.opensdf

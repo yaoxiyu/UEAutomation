@@ -39,6 +39,9 @@ public:
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FBatchCreateBlueprintsTaskExecutor>(BlueprintService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FModifyBlueprintComponentsTaskExecutor>(BlueprintService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FModifyBlueprintDefaultsTaskExecutor>(BlueprintService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCopyLiveBlueprintValuesTaskExecutor>(BlueprintService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCopyBlueprintLiveOverridesTaskExecutor>(BlueprintService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FDiagnoseBlueprintPropertyPersistenceTaskExecutor>(BlueprintService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateDataAssetTaskExecutor>(AssetService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FModifyAssetPropertiesTaskExecutor>(AssetService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FCreateMaterialInstanceTaskExecutor>(AssetService));
@@ -71,6 +74,7 @@ public:
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FDuplicateAssetTaskExecutor>(DuplicationService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FRedirectAssetReferencesTaskExecutor>(DuplicationService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FListDirectoryAssetsTaskExecutor>(DuplicationService));
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FDeleteDirectoryAssetsTaskExecutor>(DuplicationService));
 
         ApplicationService->Initialize();
 

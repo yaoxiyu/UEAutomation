@@ -45,12 +45,12 @@ bool FPropertySnapshotService::ShouldSkipForExport(const FProperty* Property) co
 
 namespace
 {
-    FString PortText(const FProperty* Property, const void* Address)
+    FString PortText(const FProperty* Property, const void* Address, UObject* Owner)
     {
         FString Out;
         if (Property && Address)
         {
-            Property->ExportTextItem(Out, Address, nullptr, nullptr, PPF_None);
+            Property->ExportTextItem(Out, Address, nullptr, Owner, PPF_None);
         }
         return Out;
     }
@@ -386,7 +386,7 @@ TSharedPtr<FJsonValue> FPropertySnapshotService::ExportPropertyValue(
     }
 
     // Fallback: ExportTextItem.
-    return MakeShared<FJsonValueString>(PortText(Property, PropertyAddress));
+    return MakeShared<FJsonValueString>(PortText(Property, PropertyAddress, nullptr));
 }
 
 bool FPropertySnapshotService::ExportObjectProperties(
@@ -427,6 +427,7 @@ bool FPropertySnapshotService::ExportObjectProperties(
         const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
         Object->SetStringField(TEXT("name"), Property->GetName());
         Object->SetStringField(TEXT("ue_type"), Property->GetClass() ? Property->GetClass()->GetName() : FString());
+        Object->SetStringField(TEXT("import_text"), PortText(Property, Address, Target));
         Object->SetField(TEXT("value"), ExportPropertyValue(Property, Address, 0, Options, OutResult));
         Object->SetBoolField(TEXT("editable"),
             Property->HasAnyPropertyFlags(CPF_Edit) && !Property->HasAnyPropertyFlags(CPF_EditConst));

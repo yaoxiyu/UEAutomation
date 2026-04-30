@@ -1,8 +1,34 @@
 #include "Protocol/AutomationProtocolTypes.h"
 
 #include "Dom/JsonObject.h"
+#include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+
+namespace
+{
+    FString ResolvePackageNameFromAssetPath(const FString& AssetPath)
+    {
+        FString PackageName = AssetPath;
+        int32 DotIndex = INDEX_NONE;
+        if (PackageName.FindChar(TEXT('.'), DotIndex))
+        {
+            PackageName = PackageName.Left(DotIndex);
+        }
+        return FPackageName::IsValidLongPackageName(PackageName) ? PackageName : FString();
+    }
+
+    FString ResolvePackageFilePath(const FString& PackageName)
+    {
+        if (PackageName.IsEmpty())
+        {
+            return FString();
+        }
+        return FPaths::ConvertRelativePathToFull(
+            FPackageName::LongPackageNameToFilename(PackageName, FPackageName::GetAssetPackageExtension()));
+    }
+}
 
 void FAutomationTaskResult::AddError(const FString& Code, const FString& Message, const FString& Field)
 {
@@ -25,6 +51,18 @@ void FAutomationTaskResult::AddWarning(const FString& Message)
 void FAutomationTaskResult::AddLog(const FString& Message)
 {
     LogLines.Add(Message);
+}
+
+void FAutomationTaskResult::AddFieldResult(const FString& Path, const FString& Status, const FString& WriteTarget, const FString& WriteMode, const FString& Reason, const FString& Message)
+{
+    FAutomationFieldResult Result;
+    Result.Path = Path;
+    Result.Status = Status;
+    Result.WriteTarget = WriteTarget;
+    Result.WriteMode = WriteMode;
+    Result.Reason = Reason;
+    Result.Message = Message;
+    FieldResults.Add(Result);
 }
 
 bool FAutomationProtocolJson::ParseRequest(const FString& JsonText, FAutomationTaskRequest& OutRequest, FAutomationTaskResult& OutResult)
@@ -181,6 +219,7 @@ bool FAutomationProtocolJson::ParseRequest(const FString& JsonText, FAutomationT
             FAutomationOperation Operation;
             OperationObject->TryGetStringField(TEXT("op"), Operation.Op);
             OperationObject->TryGetStringField(TEXT("component_lookup_policy"), Operation.ComponentLookupPolicy);
+            OperationObject->TryGetStringField(TEXT("target_kind"), Operation.TargetKind);
             ParseComponentSpec(OperationObject, Operation.Component);
             const TArray<TSharedPtr<FJsonValue>>* PropertiesArray = nullptr;
             if (OperationObject->TryGetArrayField(TEXT("properties"), PropertiesArray))
@@ -366,7 +405,15 @@ bool FAutomationProtocolJson::SerializeResult(const FAutomationTaskResult& Resul
     for (const FAutomationAssetOutput& Output : Result.AssetOutputs)
     {
         const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
+        const FString PackageName = Output.PackageName.IsEmpty()
+            ? ResolvePackageNameFromAssetPath(Output.AssetPath)
+            : Output.PackageName;
+        const FString PackageFilePath = Output.PackageFilePath.IsEmpty()
+            ? ResolvePackageFilePath(PackageName)
+            : Output.PackageFilePath;
         Object->SetStringField(TEXT("asset_path"), Output.AssetPath);
+        Object->SetStringField(TEXT("package_name"), PackageName);
+        Object->SetStringField(TEXT("package_file_path"), PackageFilePath);
         Object->SetStringField(TEXT("asset_name"), Output.AssetName);
         Object->SetStringField(TEXT("asset_type"), Output.AssetType);
         AssetOutputs.Add(MakeShared<FJsonValueObject>(Object));
@@ -385,6 +432,20 @@ bool FAutomationProtocolJson::SerializeResult(const FAutomationTaskResult& Resul
         Artifacts.Add(MakeShared<FJsonValueObject>(Object));
     }
     Root->SetArrayField(TEXT("artifacts"), Artifacts);
+
+    TArray<TSharedPtr<FJsonValue>> FieldResults;
+    for (const FAutomationFieldResult& FieldResult : Result.FieldResults)
+    {
+        const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
+        Object->SetStringField(TEXT("path"), FieldResult.Path);
+        Object->SetStringField(TEXT("status"), FieldResult.Status);
+        Object->SetStringField(TEXT("write_target"), FieldResult.WriteTarget);
+        Object->SetStringField(TEXT("write_mode"), FieldResult.WriteMode);
+        Object->SetStringField(TEXT("reason"), FieldResult.Reason);
+        Object->SetStringField(TEXT("message"), FieldResult.Message);
+        FieldResults.Add(MakeShared<FJsonValueObject>(Object));
+    }
+    Root->SetArrayField(TEXT("field_results"), FieldResults);
 
     TArray<TSharedPtr<FJsonValue>> Warnings;
     for (const FString& Warning : Result.Warnings)

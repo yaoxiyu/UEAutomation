@@ -8,10 +8,51 @@
 #include "Dom/JsonValue.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
+#include "GameplayTagContainer.h"
 #include "UObject/UnrealType.h"
 
 namespace
 {
+    FString DescribePropertyForAssignment(FProperty* Property)
+    {
+        if (!Property)
+        {
+            return TEXT("<null property>");
+        }
+
+        FString Description = FString::Printf(TEXT("%s '%s'"), *Property->GetClass()->GetName(), *Property->GetName());
+        if (const FStructProperty* StructProperty = CastField<FStructProperty>(Property))
+        {
+            Description += FString::Printf(
+                TEXT(" struct='%s' path='%s'"),
+                StructProperty->Struct ? *StructProperty->Struct->GetName() : TEXT("<null>"),
+                StructProperty->Struct ? *StructProperty->Struct->GetPathName() : TEXT("<null>"));
+        }
+        return Description;
+    }
+
+    bool IsStructNamed(const FStructProperty* StructProperty, const TCHAR* ExpectedName)
+    {
+        if (!StructProperty || !StructProperty->Struct || !ExpectedName)
+        {
+            return false;
+        }
+
+        const FName StructName = StructProperty->Struct->GetFName();
+        if (StructName == FName(ExpectedName))
+        {
+            return true;
+        }
+
+        const FString StructPath = StructProperty->Struct->GetPathName();
+        return StructPath.EndsWith(FString::Printf(TEXT(".%s"), ExpectedName));
+    }
+
+    bool IsStructPropertyNamed(FProperty* Property, const TCHAR* ExpectedName)
+    {
+        return IsStructNamed(CastField<FStructProperty>(Property), ExpectedName);
+    }
+
     FString NormalizeImportPath(const FString& Value)
     {
         int32 FirstQuote = INDEX_NONE;
@@ -87,6 +128,203 @@ namespace
         return bValue ? TEXT("True") : TEXT("False");
     }
 
+    bool TryReadEnumInt(const TSharedPtr<FJsonObject>& Object, const TCHAR* FieldName, int64& OutValue)
+    {
+        if (!Object.IsValid())
+        {
+            return false;
+        }
+
+        const TSharedPtr<FJsonObject>* EnumObject = nullptr;
+        if (Object->TryGetObjectField(FieldName, EnumObject) && EnumObject && EnumObject->IsValid())
+        {
+            double Raw = 0.0;
+            if ((*EnumObject)->TryGetNumberField(TEXT("raw"), Raw))
+            {
+                OutValue = static_cast<int64>(Raw);
+                return true;
+            }
+        }
+
+        double Number = 0.0;
+        if (Object->TryGetNumberField(FieldName, Number))
+        {
+            OutValue = static_cast<int64>(Number);
+            return true;
+        }
+
+        return false;
+    }
+
+    bool TryReadEnumName(const TSharedPtr<FJsonObject>& Object, const TCHAR* FieldName, FString& OutName)
+    {
+        if (!Object.IsValid())
+        {
+            return false;
+        }
+
+        const TSharedPtr<FJsonObject>* EnumObject = nullptr;
+        if (Object->TryGetObjectField(FieldName, EnumObject) && EnumObject && EnumObject->IsValid())
+        {
+            if ((*EnumObject)->TryGetStringField(TEXT("name"), OutName) && !OutName.IsEmpty())
+            {
+                return true;
+            }
+        }
+
+        return Object->TryGetStringField(FieldName, OutName) && !OutName.IsEmpty();
+    }
+
+    bool TryResolveEnumValue(UEnum* Enum, const FString& Name, int64& OutValue)
+    {
+        if (!Enum || Name.IsEmpty())
+        {
+            return false;
+        }
+
+        const int64 Direct = Enum->GetValueByNameString(Name);
+        if (Direct != INDEX_NONE)
+        {
+            OutValue = Direct;
+            return true;
+        }
+
+        const FString EnumName = Enum->GetName();
+        const int64 Qualified = Enum->GetValueByNameString(EnumName + TEXT("::") + Name);
+        if (Qualified != INDEX_NONE)
+        {
+            OutValue = Qualified;
+            return true;
+        }
+
+        return false;
+    }
+
+    bool TryApplyBodyInstanceJson(UPrimitiveComponent* PrimitiveComponent, const TSharedPtr<FJsonObject>& Object, FString& OutError)
+    {
+        if (!PrimitiveComponent || !Object.IsValid())
+        {
+            return false;
+        }
+
+        int64 Raw = 0;
+        FString EnumName;
+        if (TryReadEnumInt(Object, TEXT("ObjectType"), Raw))
+        {
+            PrimitiveComponent->SetCollisionObjectType(static_cast<ECollisionChannel>(Raw));
+        }
+        else if (TryReadEnumName(Object, TEXT("ObjectType"), EnumName))
+        {
+            int64 EnumValue = 0;
+            if (TryResolveEnumValue(StaticEnum<ECollisionChannel>(), EnumName, EnumValue))
+            {
+                PrimitiveComponent->SetCollisionObjectType(static_cast<ECollisionChannel>(EnumValue));
+            }
+        }
+
+        if (TryReadEnumInt(Object, TEXT("CollisionEnabled"), Raw))
+        {
+            PrimitiveComponent->SetCollisionEnabled(static_cast<ECollisionEnabled::Type>(Raw));
+        }
+        else if (TryReadEnumName(Object, TEXT("CollisionEnabled"), EnumName))
+        {
+            int64 EnumValue = 0;
+            if (TryResolveEnumValue(StaticEnum<ECollisionEnabled::Type>(), EnumName, EnumValue))
+            {
+                PrimitiveComponent->SetCollisionEnabled(static_cast<ECollisionEnabled::Type>(EnumValue));
+            }
+        }
+
+        const TSharedPtr<FJsonObject>* CollisionResponses = nullptr;
+        if (Object->TryGetObjectField(TEXT("CollisionResponses"), CollisionResponses) && CollisionResponses && CollisionResponses->IsValid())
+        {
+            const TArray<TSharedPtr<FJsonValue>>* ResponseArray = nullptr;
+            if ((*CollisionResponses)->TryGetArrayField(TEXT("ResponseArray"), ResponseArray))
+            {
+                for (const TSharedPtr<FJsonValue>& EntryValue : *ResponseArray)
+                {
+                    const TSharedPtr<FJsonObject> Entry = EntryValue.IsValid() ? EntryValue->AsObject() : nullptr;
+                    if (!Entry.IsValid())
+                    {
+                        continue;
+                    }
+
+                    FString ChannelName;
+                    if (!Entry->TryGetStringField(TEXT("Channel"), ChannelName) || ChannelName.IsEmpty())
+                    {
+                        continue;
+                    }
+
+                    ECollisionChannel Channel = ECC_MAX;
+                    int64 ChannelValue = 0;
+                    if (TryResolveEnumValue(StaticEnum<ECollisionChannel>(), ChannelName, ChannelValue))
+                    {
+                        Channel = static_cast<ECollisionChannel>(ChannelValue);
+                    }
+                    if (Channel == ECC_MAX)
+                    {
+                        continue;
+                    }
+
+                    ECollisionResponse Response = ECR_Ignore;
+                    if (TryReadEnumInt(Entry, TEXT("Response"), Raw))
+                    {
+                        Response = static_cast<ECollisionResponse>(Raw);
+                    }
+                    else if (TryReadEnumName(Entry, TEXT("Response"), EnumName))
+                    {
+                        int64 ResponseValue = 0;
+                        if (TryResolveEnumValue(StaticEnum<ECollisionResponse>(), EnumName, ResponseValue))
+                        {
+                            Response = static_cast<ECollisionResponse>(ResponseValue);
+                        }
+                    }
+                    PrimitiveComponent->SetCollisionResponseToChannel(Channel, Response);
+                }
+            }
+        }
+
+        FString CollisionProfileName;
+        if (Object->TryGetStringField(TEXT("CollisionProfileName"), CollisionProfileName) && !CollisionProfileName.IsEmpty())
+        {
+            PrimitiveComponent->SetCollisionProfileName(FName(*CollisionProfileName));
+        }
+
+        PrimitiveComponent->Modify();
+        return true;
+    }
+
+    bool TryNormalizeIntegerImportText(FProperty* Property, FString& InOutImportText)
+    {
+        FNumericProperty* NumericProperty = CastField<FNumericProperty>(Property);
+        if (!NumericProperty || NumericProperty->IsFloatingPoint())
+        {
+            return false;
+        }
+
+        FString Trimmed = InOutImportText;
+        Trimmed.TrimStartAndEndInline();
+        if (Trimmed.IsEmpty())
+        {
+            return false;
+        }
+
+        double Number = 0.0;
+        if (!LexTryParseString(Number, *Trimmed))
+        {
+            return false;
+        }
+
+        const double Rounded = FMath::RoundToDouble(Number);
+        if (FMath::Abs(Number - Rounded) > static_cast<double>(KINDA_SMALL_NUMBER))
+        {
+            return false;
+        }
+
+        InOutImportText = FString::Printf(TEXT("%lld"), static_cast<int64>(Rounded));
+        return true;
+    }
+
     bool BuildGameplayTagImportTextFromValue(const TSharedPtr<FJsonValue>& Value, FString& OutText, FString& OutError)
     {
         if (!Value.IsValid() || Value->Type == EJson::Null)
@@ -124,6 +362,131 @@ namespace
         return true;
     }
 
+    bool ExtractGameplayTagNamesFromImportText(const FString& ImportText, TArray<FName>& OutTagNames, FString& OutError)
+    {
+        OutTagNames.Reset();
+
+        FString Remaining = ImportText;
+        int32 SearchStart = 0;
+        while (true)
+        {
+            int32 TagNameIndex = INDEX_NONE;
+            if (!Remaining.FindChar(TEXT('T'), TagNameIndex))
+            {
+                break;
+            }
+
+            const int32 FullIndex = SearchStart + TagNameIndex;
+            const FString Tail = ImportText.Mid(FullIndex);
+            if (!Tail.StartsWith(TEXT("TagName=\"")))
+            {
+                SearchStart = FullIndex + 1;
+                Remaining = ImportText.Mid(SearchStart);
+                continue;
+            }
+
+            const int32 ValueStart = FullIndex + 9;
+            int32 ValueEnd = INDEX_NONE;
+            if (!ImportText.Mid(ValueStart).FindChar(TEXT('"'), ValueEnd))
+            {
+                OutError = FString::Printf(TEXT("Malformed GameplayTagContainer import text '%s'."), *ImportText);
+                return false;
+            }
+
+            const FString TagName = ImportText.Mid(ValueStart, ValueEnd);
+            if (!TagName.IsEmpty() && TagName != TEXT("None"))
+            {
+                OutTagNames.Add(FName(*TagName));
+            }
+
+            SearchStart = ValueStart + ValueEnd + 1;
+            Remaining = ImportText.Mid(SearchStart);
+        }
+
+        return true;
+    }
+
+    bool TryAssignGameplayTagImportText(FProperty* Property, void* ValuePtr, const FString& ImportText, FString& OutError, bool& bOutHandled)
+    {
+        bOutHandled = false;
+
+        FStructProperty* StructProperty = CastField<FStructProperty>(Property);
+        if (!StructProperty)
+        {
+            return true;
+        }
+
+        TArray<FName> TagNames;
+
+        if (IsStructNamed(StructProperty, TEXT("GameplayTag")))
+        {
+            bOutHandled = true;
+            if (!ExtractGameplayTagNamesFromImportText(ImportText, TagNames, OutError))
+            {
+                return false;
+            }
+
+            FGameplayTag* TagValue = static_cast<FGameplayTag*>(ValuePtr);
+            if (!TagValue)
+            {
+                OutError = TEXT("GameplayTag target memory is invalid.");
+                return false;
+            }
+
+            if (TagNames.Num() == 0)
+            {
+                *TagValue = FGameplayTag();
+                return true;
+            }
+            if (TagNames.Num() > 1)
+            {
+                OutError = FString::Printf(TEXT("GameplayTag property cannot accept multiple tags from '%s'."), *ImportText);
+                return false;
+            }
+
+            const FGameplayTag RequestedTag = FGameplayTag::RequestGameplayTag(TagNames[0], /*ErrorIfNotFound*/false);
+            if (!RequestedTag.IsValid())
+            {
+                OutError = FString::Printf(TEXT("Gameplay tag '%s' is not registered."), *TagNames[0].ToString());
+                return false;
+            }
+            *TagValue = RequestedTag;
+            return true;
+        }
+
+        if (!IsStructNamed(StructProperty, TEXT("GameplayTagContainer")))
+        {
+            return true;
+        }
+
+        bOutHandled = true;
+        if (!ExtractGameplayTagNamesFromImportText(ImportText, TagNames, OutError))
+        {
+            return false;
+        }
+
+        FGameplayTagContainer* Container = static_cast<FGameplayTagContainer*>(ValuePtr);
+        if (!Container)
+        {
+            OutError = TEXT("GameplayTagContainer target memory is invalid.");
+            return false;
+        }
+
+        Container->Reset();
+        for (const FName& TagName : TagNames)
+        {
+            const FGameplayTag Tag = FGameplayTag::RequestGameplayTag(TagName, /*ErrorIfNotFound*/false);
+            if (!Tag.IsValid())
+            {
+                OutError = FString::Printf(TEXT("Gameplay tag '%s' is not registered."), *TagName.ToString());
+                return false;
+            }
+            Container->AddTag(Tag);
+        }
+
+        return true;
+    }
+
     bool HasOnlyTrailingWhitespace(const TCHAR* Text)
     {
         if (!Text)
@@ -142,18 +505,18 @@ namespace
     }
 }
 
-bool FPropertyAssignmentService::AssignProperties(UObject* Target, const TArray<FAutomationPropertyValue>& Properties, FAutomationTaskResult& OutResult, const FString& FieldPrefix) const
+bool FPropertyAssignmentService::AssignProperties(UObject* Target, const TArray<FAutomationPropertyValue>& Properties, FAutomationTaskResult& OutResult, const FString& FieldPrefix, const TArray<FAutomationAssetRedirect>& Redirects) const
 {
     bool bOk = true;
     for (int32 Index = 0; Index < Properties.Num(); ++Index)
     {
         const FString Field = FString::Printf(TEXT("%s[%d]"), *FieldPrefix, Index);
-        bOk &= AssignProperty(Target, Properties[Index], OutResult, Field);
+        bOk &= AssignProperty(Target, Properties[Index], OutResult, Field, Redirects);
     }
     return bOk;
 }
 
-bool FPropertyAssignmentService::AssignProperty(UObject* Target, const FAutomationPropertyValue& PropertyValue, FAutomationTaskResult& OutResult, const FString& FieldPrefix) const
+bool FPropertyAssignmentService::AssignProperty(UObject* Target, const FAutomationPropertyValue& PropertyValue, FAutomationTaskResult& OutResult, const FString& FieldPrefix, const TArray<FAutomationAssetRedirect>& Redirects) const
 {
     if (!Target)
     {
@@ -174,34 +537,84 @@ bool FPropertyAssignmentService::AssignProperty(UObject* Target, const FAutomati
         return false;
     }
 
-    bool bHandled = false;
-    if (!TryAssignSpecialProperty(Target, PropertyValue, OutResult, FieldPrefix, bHandled))
-    {
-        return false;
-    }
-    if (bHandled)
-    {
-        Target->Modify();
-        OutResult.Metrics.PropertyAssignCount++;
-        return true;
-    }
-
     FProperty* Property = Target->GetClass()->FindPropertyByName(FName(*PropertyValue.Name));
     if (!Property)
     {
         OutResult.AddError(TEXT("PropertyNotFound"), FString::Printf(TEXT("Property '%s' not found on '%s'."), *PropertyValue.Name, *Target->GetClass()->GetName()), FieldPrefix + TEXT(".name"));
         return false;
     }
+    if (CastField<FDelegateProperty>(Property)
+        || CastField<FMulticastDelegateProperty>(Property)
+        || CastField<FMulticastInlineDelegateProperty>(Property)
+        || CastField<FMulticastSparseDelegateProperty>(Property))
+    {
+        OutResult.AddWarning(FString::Printf(TEXT("Skipped delegate property '%s'; delegate bindings are not safe to reconstruct from exported meta."), *PropertyValue.Name));
+        return true;
+    }
+
+    auto MarkAssignedPropertyDirty = [Target]()
+    {
+        Target->MarkPackageDirty();
+    };
+
+    bool bHandled = false;
+    Target->Modify();
+    if (!TryAssignSpecialProperty(Target, PropertyValue, OutResult, FieldPrefix, bHandled))
+    {
+        return false;
+    }
+    if (bHandled)
+    {
+        MarkAssignedPropertyDirty();
+        OutResult.Metrics.PropertyAssignCount++;
+        return true;
+    }
 
     FString Error;
-    if (!ImportTextValue(Target, Property, PropertyValue, Error))
+    bool bReflectedHandled = false;
+    if (!TryAssignSpecialReflectedProperty(Target, Property, PropertyValue, Redirects, Error, bReflectedHandled))
+    {
+        OutResult.AddError(TEXT("InvalidPropertyValue"), Error, FieldPrefix + TEXT(".value"));
+        return false;
+    }
+    if (bReflectedHandled)
+    {
+        MarkAssignedPropertyDirty();
+        OutResult.Metrics.PropertyAssignCount++;
+        return true;
+    }
+
+    if (!ImportTextValue(Target, Property, PropertyValue, Redirects, Error))
     {
         OutResult.AddError(TEXT("InvalidPropertyValue"), Error, FieldPrefix + TEXT(".value"));
         return false;
     }
 
-    Target->Modify();
+    MarkAssignedPropertyDirty();
     OutResult.Metrics.PropertyAssignCount++;
+    return true;
+}
+
+bool FPropertyAssignmentService::ExportAssignedPropertyText(UObject* Target, const FString& PropertyName, FString& OutText, FString& OutError) const
+{
+    OutText.Reset();
+    OutError.Reset();
+
+    if (!Target)
+    {
+        OutError = TEXT("Target object is null.");
+        return false;
+    }
+
+    FProperty* Property = Target->GetClass()->FindPropertyByName(FName(*PropertyName));
+    if (!Property)
+    {
+        OutError = FString::Printf(TEXT("Property '%s' not found on '%s'."), *PropertyName, *Target->GetClass()->GetName());
+        return false;
+    }
+
+    void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Target);
+    Property->ExportTextItem(OutText, ValuePtr, nullptr, Target, PPF_None);
     return true;
 }
 
@@ -274,86 +687,244 @@ bool FPropertyAssignmentService::TryAssignSpecialProperty(UObject* Target, const
     return true;
 }
 
-bool FPropertyAssignmentService::ImportTextValue(UObject* Target, FProperty* Property, const FAutomationPropertyValue& PropertyValue, FString& OutError) const
+bool FPropertyAssignmentService::TryAssignSpecialReflectedProperty(UObject* Target, FProperty* Property, const FAutomationPropertyValue& PropertyValue, const TArray<FAutomationAssetRedirect>& Redirects, FString& OutError, bool& bOutHandled) const
 {
-    if (!PropertyValue.Value.IsValid())
+    bOutHandled = false;
+    if (!Target || !Property)
+    {
+        return true;
+    }
+
+    const bool bJsonStructValue = PropertyValue.Value.IsValid() && PropertyValue.Value->Type == EJson::Object;
+    const bool bDeclaredStructValue = PropertyValue.Type.Equals(TEXT("struct"), ESearchCase::IgnoreCase);
+    if (!bJsonStructValue && !bDeclaredStructValue)
+    {
+        return true;
+    }
+
+    const TSharedPtr<FJsonObject> Object = bJsonStructValue ? PropertyValue.Value->AsObject() : nullptr;
+    if (!Object.IsValid())
+    {
+        return true;
+    }
+
+    if (PropertyValue.Name == TEXT("BodyInstance"))
+    {
+        UPrimitiveComponent* PrimitiveComponent = Cast<UPrimitiveComponent>(Target);
+        if (!PrimitiveComponent)
+        {
+            return true;
+        }
+        bOutHandled = true;
+        return TryApplyBodyInstanceJson(PrimitiveComponent, Object, OutError);
+    }
+
+    FStructProperty* StructProperty = CastField<FStructProperty>(Property);
+    if (!StructProperty || !StructProperty->Struct)
+    {
+        return true;
+    }
+
+    void* StructAddress = StructProperty->ContainerPtrToValuePtr<void>(Target);
+    bOutHandled = true;
+    return AssignStructFieldsFromJson(StructAddress, StructProperty->Struct, Object, Redirects, OutError);
+}
+
+bool FPropertyAssignmentService::AssignStructFieldsFromJson(void* StructAddress, UScriptStruct* Struct, const TSharedPtr<FJsonObject>& Object, const TArray<FAutomationAssetRedirect>& Redirects, FString& OutError) const
+{
+    if (!StructAddress || !Struct || !Object.IsValid())
+    {
+        OutError = TEXT("Struct assignment target is invalid.");
+        return false;
+    }
+
+    for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Object->Values)
+    {
+        FProperty* InnerProperty = Struct->FindPropertyByName(FName(*Pair.Key));
+        if (!InnerProperty)
+        {
+            continue;
+        }
+
+        void* InnerAddress = InnerProperty->ContainerPtrToValuePtr<void>(StructAddress);
+        if (FStructProperty* InnerStructProperty = CastField<FStructProperty>(InnerProperty))
+        {
+            const TSharedPtr<FJsonObject> InnerObject = Pair.Value.IsValid() ? Pair.Value->AsObject() : nullptr;
+            if (InnerObject.IsValid())
+            {
+                if (!AssignStructFieldsFromJson(InnerAddress, InnerStructProperty->Struct, InnerObject, Redirects, OutError))
+                {
+                    OutError = FString::Printf(TEXT("%s.%s"), *Pair.Key, *OutError);
+                    return false;
+                }
+                continue;
+            }
+        }
+
+        FString ImportText;
+        if (!JsonValueToImportTextForProperty(Pair.Value, InnerProperty, ImportText, OutError))
+        {
+            OutError = FString::Printf(TEXT("Struct field '%s' is invalid: %s"), *Pair.Key, *OutError);
+            return false;
+        }
+        ImportText = RewriteImportTextRedirects(ImportText, Redirects);
+
+        const TCHAR* Result = InnerProperty->ImportText(*ImportText, InnerAddress, PPF_None, nullptr);
+        if (!Result || !HasOnlyTrailingWhitespace(Result))
+        {
+            OutError = FString::Printf(TEXT("Failed to import '%s' into struct field '%s'."), *ImportText, *Pair.Key);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool FPropertyAssignmentService::BuildExpectedImportText(FProperty* Property, const FAutomationPropertyValue& PropertyValue, const TArray<FAutomationAssetRedirect>& Redirects, FString& OutImportText, bool& bOutRawImportText, FString& OutError) const
+{
+    OutImportText.Reset();
+    bOutRawImportText = false;
+
+    if (!Property || !PropertyValue.Value.IsValid())
     {
         OutError = FString::Printf(TEXT("Property '%s' has no value."), *PropertyValue.Name);
         return false;
     }
 
-    FString ImportText;
     const FString Type = PropertyValue.Type.ToLower();
-    if (Type == TEXT("array"))
+    bOutRawImportText = Type == TEXT("import_text") || Type == TEXT("raw_import_text");
+    if (bOutRawImportText)
     {
-        if (!CastField<FArrayProperty>(Property))
-        {
-            OutError = FString::Printf(TEXT("Property '%s' is not an array property."), *PropertyValue.Name);
-            return false;
-        }
-        if (!JsonValueToImportTextForProperty(PropertyValue.Value, Property, ImportText, OutError))
-        {
-            return false;
-        }
-    }
-    else if (Type == TEXT("struct"))
-    {
-        if (!CastField<FStructProperty>(Property))
-        {
-            OutError = FString::Printf(TEXT("Property '%s' is not a struct property."), *PropertyValue.Name);
-            return false;
-        }
-        if (!JsonValueToImportTextForProperty(PropertyValue.Value, Property, ImportText, OutError))
-        {
-            return false;
-        }
-    }
-    else if (Type == TEXT("set"))
-    {
-        if (!CastField<FSetProperty>(Property))
-        {
-            OutError = FString::Printf(TEXT("Property '%s' is not a set property."), *PropertyValue.Name);
-            return false;
-        }
-        if (!JsonValueToImportTextForProperty(PropertyValue.Value, Property, ImportText, OutError))
-        {
-            return false;
-        }
-    }
-    else if (Type == TEXT("map"))
-    {
-        if (!CastField<FMapProperty>(Property))
-        {
-            OutError = FString::Printf(TEXT("Property '%s' is not a map property."), *PropertyValue.Name);
-            return false;
-        }
-        if (!JsonValueToImportTextForProperty(PropertyValue.Value, Property, ImportText, OutError))
-        {
-            return false;
-        }
+        OutImportText = RewriteImportTextRedirects(JsonValueToString(PropertyValue), Redirects);
+        TryNormalizeIntegerImportText(Property, OutImportText);
     }
     else
     {
-        ImportText = JsonValueToImportText(PropertyValue);
+        if (!JsonValueToImportTextForProperty(PropertyValue.Value, Property, OutImportText, OutError))
+        {
+            return false;
+        }
+        OutImportText = RewriteImportTextRedirects(OutImportText, Redirects);
     }
 
-    if (ImportText.IsEmpty() && PropertyValue.Type != TEXT("string") && PropertyValue.Type != TEXT("text"))
+    if (OutImportText.IsEmpty() && PropertyValue.Type != TEXT("string") && PropertyValue.Type != TEXT("text"))
     {
         OutError = FString::Printf(TEXT("Property '%s' value cannot be converted."), *PropertyValue.Name);
         return false;
     }
 
-    void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Target);
-    const TCHAR* Result = Property->ImportText(*ImportText, ValuePtr, PPF_None, Target);
-    if (!Result)
+    return true;
+}
+
+bool FPropertyAssignmentService::BuildExpectedAssignedPropertyText(FProperty* Property, const FAutomationPropertyValue& PropertyValue, const TArray<FAutomationAssetRedirect>& Redirects, UObject* OwnerForPortFlags, FString& OutExpectedText, FString& OutError) const
+{
+    OutExpectedText.Reset();
+    FString ImportText;
+    bool bRawImportText = false;
+    if (!BuildExpectedImportText(Property, PropertyValue, Redirects, ImportText, bRawImportText, OutError))
     {
-        OutError = FString::Printf(TEXT("Failed to import '%s' into property '%s'."), *ImportText, *PropertyValue.Name);
         return false;
     }
-    if (!HasOnlyTrailingWhitespace(Result))
+
+    uint8* Scratch = static_cast<uint8*>(FMemory::Malloc(Property->GetSize(), Property->GetMinAlignment()));
+    Property->InitializeValue(Scratch);
+
+    bool bSpecialImportHandled = false;
+    if (!TryAssignGameplayTagImportText(Property, Scratch, ImportText, OutError, bSpecialImportHandled))
     {
-        OutError = FString::Printf(TEXT("Property '%s' only partially imported '%s'. Remaining text starts with '%s'."),
-            *PropertyValue.Name, *ImportText, Result);
+        Property->DestroyValue(Scratch);
+        FMemory::Free(Scratch);
+        return false;
+    }
+
+    if (!bSpecialImportHandled)
+    {
+        const TCHAR* ImportResult = Property->ImportText(*ImportText, Scratch, PPF_None, OwnerForPortFlags);
+        if (!ImportResult || !HasOnlyTrailingWhitespace(ImportResult))
+        {
+            Property->DestroyValue(Scratch);
+            FMemory::Free(Scratch);
+            OutError = FString::Printf(TEXT("Expected value '%s' cannot be imported for property '%s'."), *ImportText, *PropertyValue.Name);
+            return false;
+        }
+    }
+
+    Property->ExportTextItem(OutExpectedText, Scratch, nullptr, OwnerForPortFlags, PPF_None);
+    Property->DestroyValue(Scratch);
+    FMemory::Free(Scratch);
+    return true;
+}
+
+bool FPropertyAssignmentService::ImportTextValue(UObject* Target, FProperty* Property, const FAutomationPropertyValue& PropertyValue, const TArray<FAutomationAssetRedirect>& Redirects, FString& OutError) const
+{
+    FString ImportText;
+    bool bRawImportText = false;
+    if (!BuildExpectedImportText(Property, PropertyValue, Redirects, ImportText, bRawImportText, OutError))
+    {
+        return false;
+    }
+    (void)bRawImportText;
+
+    void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Target);
+    bool bSpecialImportHandled = false;
+    if (!TryAssignGameplayTagImportText(Property, ValuePtr, ImportText, OutError, bSpecialImportHandled))
+    {
+        return false;
+    }
+
+    if (!bSpecialImportHandled)
+    {
+        const TCHAR* Result = Property->ImportText(*ImportText, ValuePtr, PPF_None, Target);
+        if (!Result)
+        {
+            OutError = FString::Printf(
+                TEXT("Failed to import '%s' into property '%s' (%s)."),
+                *ImportText,
+                *PropertyValue.Name,
+                *DescribePropertyForAssignment(Property));
+            return false;
+        }
+        if (!HasOnlyTrailingWhitespace(Result))
+        {
+            OutError = FString::Printf(TEXT("Property '%s' only partially imported '%s'. Remaining text starts with '%s'."),
+                *PropertyValue.Name, *ImportText, Result);
+            return false;
+        }
+    }
+
+    if (bRawImportText)
+    {
+        // Raw UE import text is the authoritative transport format for types
+        // such as GAS FieldPath, FGameplayAttribute and localized FText. These
+        // can be accepted by the real target object while failing scratch
+        // round-trip or producing regenerated text keys, so full-consumption
+        // ImportText validation is the meaningful safety check here.
+        return true;
+    }
+
+    FString ExpectedText;
+    FString ExpectedError;
+    if (!BuildExpectedAssignedPropertyText(Property, PropertyValue, Redirects, Target, ExpectedText, ExpectedError))
+    {
+        OutError = FString::Printf(
+            TEXT("Property '%s' was assigned but expected-value construction failed for %s: %s"),
+            *PropertyValue.Name,
+            *DescribePropertyForAssignment(Property),
+            *ExpectedError);
+        return false;
+    }
+
+    FString ActualText;
+    Property->ExportTextItem(ActualText, ValuePtr, nullptr, Target, PPF_None);
+    if (ActualText != ExpectedText)
+    {
+        OutError = FString::Printf(
+            TEXT("Property '%s' assignment did not take effect for %s. Import text: '%s'. Expected exported value: '%s'. Actual exported value: '%s'."),
+            *PropertyValue.Name,
+            *DescribePropertyForAssignment(Property),
+            *ImportText,
+            *ExpectedText,
+            *ActualText);
         return false;
     }
 
@@ -365,6 +936,33 @@ bool FPropertyAssignmentService::ImportTextValue(UObject* Target, FProperty* Pro
     return true;
 }
 
+FString FPropertyAssignmentService::RewriteImportTextRedirects(const FString& ImportText, const TArray<FAutomationAssetRedirect>& Redirects) const
+{
+    FString Rewritten = ImportText;
+    for (const FAutomationAssetRedirect& Redirect : Redirects)
+    {
+        if (Redirect.From.IsEmpty() || Redirect.To.IsEmpty())
+        {
+            continue;
+        }
+
+        Rewritten = Rewritten.Replace(*Redirect.From, *Redirect.To, ESearchCase::CaseSensitive);
+
+        FString FromPackage;
+        FString FromObject;
+        FString ToPackage;
+        FString ToObject;
+        if (Redirect.From.Split(TEXT("."), &FromPackage, &FromObject, ESearchCase::CaseSensitive, ESearchDir::FromEnd)
+            && Redirect.To.Split(TEXT("."), &ToPackage, &ToObject, ESearchCase::CaseSensitive, ESearchDir::FromEnd)
+            && !FromPackage.IsEmpty()
+            && !ToPackage.IsEmpty())
+        {
+            Rewritten = Rewritten.Replace(*FromPackage, *ToPackage, ESearchCase::CaseSensitive);
+        }
+    }
+    return Rewritten;
+}
+
 bool FPropertyAssignmentService::ValidateImportedPropertyRoundTrip(UObject* Target, FProperty* Property, const FString& PropertyName, FString& OutError) const
 {
     if (!Target || !Property)
@@ -373,19 +971,37 @@ bool FPropertyAssignmentService::ValidateImportedPropertyRoundTrip(UObject* Targ
         return false;
     }
 
+    if (IsStructPropertyNamed(Property, TEXT("BodyInstance")))
+    {
+        // FBodyInstance exports editor-facing collision data but keeps derived
+        // physics/runtime fields outside the text form. ImportText followed by
+        // ExportText equality is meaningful; full Identical() round-trip is not.
+        return true;
+    }
+
     void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Target);
     FString ExportedText;
     Property->ExportTextItem(ExportedText, ValuePtr, nullptr, Target, PPF_None);
 
     uint8* Scratch = static_cast<uint8*>(FMemory::Malloc(Property->GetSize(), Property->GetMinAlignment()));
     Property->InitializeValue(Scratch);
-    const TCHAR* ImportResult = Property->ImportText(*ExportedText, Scratch, PPF_None, Target);
-    if (!ImportResult || !HasOnlyTrailingWhitespace(ImportResult))
+    bool bSpecialImportHandled = false;
+    if (!TryAssignGameplayTagImportText(Property, Scratch, ExportedText, OutError, bSpecialImportHandled))
     {
         Property->DestroyValue(Scratch);
         FMemory::Free(Scratch);
-        OutError = FString::Printf(TEXT("Property '%s' failed export/import round-trip for exported value '%s'."), *PropertyName, *ExportedText);
         return false;
+    }
+    if (!bSpecialImportHandled)
+    {
+        const TCHAR* ImportResult = Property->ImportText(*ExportedText, Scratch, PPF_None, Target);
+        if (!ImportResult || !HasOnlyTrailingWhitespace(ImportResult))
+        {
+            Property->DestroyValue(Scratch);
+            FMemory::Free(Scratch);
+            OutError = FString::Printf(TEXT("Property '%s' failed export/import round-trip for exported value '%s'."), *PropertyName, *ExportedText);
+            return false;
+        }
     }
 
     const bool bIdentical = Property->Identical(ValuePtr, Scratch, PPF_None);
@@ -394,6 +1010,51 @@ bool FPropertyAssignmentService::ValidateImportedPropertyRoundTrip(UObject* Targ
     if (!bIdentical)
     {
         OutError = FString::Printf(TEXT("Property '%s' did not survive export/import round-trip. Exported value: '%s'."), *PropertyName, *ExportedText);
+        return false;
+    }
+
+    return true;
+}
+
+bool FPropertyAssignmentService::ValidateImportedPropertyMatchesText(UObject* Target, FProperty* Property, const FString& PropertyName, const FString& ImportText, FString& OutError) const
+{
+    if (!Target || !Property)
+    {
+        OutError = FString::Printf(TEXT("Property '%s' text validation target is invalid."), *PropertyName);
+        return false;
+    }
+
+    uint8* Scratch = static_cast<uint8*>(FMemory::Malloc(Property->GetSize(), Property->GetMinAlignment()));
+    Property->InitializeValue(Scratch);
+    const TCHAR* ImportResult = Property->ImportText(*ImportText, Scratch, PPF_None, Target);
+    if (!ImportResult || !HasOnlyTrailingWhitespace(ImportResult))
+    {
+        // Some FieldPath/GAS text accepted by the real target cannot be
+        // reconstructed safely on scratch memory. Keep full-consumption target
+        // ImportText as the fallback for those cases.
+        Property->DestroyValue(Scratch);
+        FMemory::Free(Scratch);
+        return true;
+    }
+
+    void* ValuePtr = Property->ContainerPtrToValuePtr<void>(Target);
+    const bool bIdentical = Property->Identical(ValuePtr, Scratch, PPF_None);
+    FString ActualText;
+    if (!bIdentical)
+    {
+        Property->ExportTextItem(ActualText, ValuePtr, nullptr, Target, PPF_None);
+    }
+
+    Property->DestroyValue(Scratch);
+    FMemory::Free(Scratch);
+
+    if (!bIdentical)
+    {
+        OutError = FString::Printf(
+            TEXT("Property '%s' accepted import text but target value does not match imported scratch value. Import text: '%s'. Actual value: '%s'."),
+            *PropertyName,
+            *ImportText,
+            *ActualText);
         return false;
     }
 
@@ -556,9 +1217,16 @@ bool FPropertyAssignmentService::JsonValueToImportTextForProperty(const TSharedP
         return true;
     }
 
-    if (CastField<FNumericProperty>(Property))
+    if (FNumericProperty* NumericProperty = CastField<FNumericProperty>(Property))
     {
-        OutImportText = FString::SanitizeFloat(Value->AsNumber());
+        if (NumericProperty->IsInteger())
+        {
+            OutImportText = FString::Printf(TEXT("%lld"), static_cast<int64>(FMath::RoundToDouble(Value->AsNumber())));
+        }
+        else
+        {
+            OutImportText = FString::SanitizeFloat(Value->AsNumber());
+        }
         return true;
     }
 
@@ -842,93 +1510,6 @@ bool FPropertyAssignmentService::JsonMapArrayToMapImportText(const TArray<TShare
 
     OutImportText = FString::Printf(TEXT("(%s)"), *FString::Join(Pairs, TEXT(",")));
     return true;
-}
-
-FString FPropertyAssignmentService::JsonValueToImportText(const FAutomationPropertyValue& PropertyValue) const
-{
-    const FString Type = PropertyValue.Type.ToLower();
-    const TSharedPtr<FJsonValue>& Value = PropertyValue.Value;
-
-    if (Type == TEXT("bool"))
-    {
-        return Value->AsBool() ? TEXT("True") : TEXT("False");
-    }
-    if (Type == TEXT("int") || Type == TEXT("int64") || Type == TEXT("float") || Type == TEXT("double"))
-    {
-        return FString::SanitizeFloat(Value->AsNumber());
-    }
-    if (Type == TEXT("name") || Type == TEXT("string") || Type == TEXT("text") || Type == TEXT("enum"))
-    {
-        return Value->AsString();
-    }
-    if (Type == TEXT("object_path") || Type == TEXT("soft_object_path") || Type == TEXT("class_path") || Type == TEXT("soft_class_path"))
-    {
-        return Value->AsString();
-    }
-
-    if (Type == TEXT("vector"))
-    {
-        const TArray<TSharedPtr<FJsonValue>>& Array = Value->AsArray();
-        if (Array.Num() != 3)
-        {
-            return FString();
-        }
-        return FString::Printf(TEXT("(X=%s,Y=%s,Z=%s)"),
-            *FString::SanitizeFloat(Array[0]->AsNumber()),
-            *FString::SanitizeFloat(Array[1]->AsNumber()),
-            *FString::SanitizeFloat(Array[2]->AsNumber()));
-    }
-
-    if (Type == TEXT("rotator"))
-    {
-        const TArray<TSharedPtr<FJsonValue>>& Array = Value->AsArray();
-        if (Array.Num() != 3)
-        {
-            return FString();
-        }
-        return FString::Printf(TEXT("(Pitch=%s,Yaw=%s,Roll=%s)"),
-            *FString::SanitizeFloat(Array[0]->AsNumber()),
-            *FString::SanitizeFloat(Array[1]->AsNumber()),
-            *FString::SanitizeFloat(Array[2]->AsNumber()));
-    }
-
-    if (Type == TEXT("vector2d"))
-    {
-        const TArray<TSharedPtr<FJsonValue>>& Array = Value->AsArray();
-        if (Array.Num() != 2)
-        {
-            return FString();
-        }
-        return FString::Printf(TEXT("(X=%s,Y=%s)"),
-            *FString::SanitizeFloat(Array[0]->AsNumber()),
-            *FString::SanitizeFloat(Array[1]->AsNumber()));
-    }
-
-    if (Type == TEXT("color") || Type == TEXT("linear_color"))
-    {
-        const TArray<TSharedPtr<FJsonValue>>& Array = Value->AsArray();
-        if (Array.Num() != 4)
-        {
-            return FString();
-        }
-        return FString::Printf(TEXT("(R=%s,G=%s,B=%s,A=%s)"),
-            *FString::SanitizeFloat(Array[0]->AsNumber()),
-            *FString::SanitizeFloat(Array[1]->AsNumber()),
-            *FString::SanitizeFloat(Array[2]->AsNumber()),
-            *FString::SanitizeFloat(Array[3]->AsNumber()));
-    }
-
-    if (Type == TEXT("transform"))
-    {
-        const TSharedPtr<FJsonObject> Object = Value->AsObject();
-        if (!Object.IsValid())
-        {
-            return FString();
-        }
-        return TEXT("()");
-    }
-
-    return Value->AsString();
 }
 
 FString FPropertyAssignmentService::JsonValueToString(const FAutomationPropertyValue& PropertyValue) const

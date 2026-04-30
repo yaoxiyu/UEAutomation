@@ -21,3 +21,8 @@ bool FListDirectoryAssetsTaskExecutor::Execute(const FAutomationTaskRequest& Req
 {
     return Service->ListDirectoryAssets(Request, OutResult);
 }
+
+bool FDeleteDirectoryAssetsTaskExecutor::Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
+{
+    return Service->DeleteDirectoryAssets(Request, OutResult);
+}

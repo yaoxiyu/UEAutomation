@@ -7,6 +7,8 @@ UE Editor C++ 插件，用于声明式资产自动化：蓝图、DataAsset、材
 
 - `Docs/Current_Truth.md` —— 实现的能力以及它怎么工作
 - `Docs/Task_Interface.md` —— JSON 任务协议与每个 task 的字段
+- `Docs/Automation_Workflow_Design.md` —— C++ 原子能力、AI 编排层与工作流模板设计
+- `Docs/AI_Workflow_Quickstart.md` —— 新 AI 会话只读这一份即可按工作流方式开始
 - `Docs/Tech_Debt.md` —— 已知限制与待重构点
 - `Docs/CI_Integration.md` —— 辅助脚本说明
 
@@ -50,7 +52,9 @@ Plugins/UEEditorAutomation/Config/UEEditorAutomationTemplates.json
 python .\Scripts\automation_test.py --samples-dir .\Samples
 ```
 
-要求编辑器已由用户或 CI 手动启动；脚本不会启动编辑器或触发编译。
+要求编辑器已由用户或 CI 手动启动；脚本不会启动编辑器或触发 C++ 编译。
+蓝图写入任务可以在运行中的编辑器里执行 Blueprint compile + save，
+这用于暴露蓝图编译错误，不属于 C++ 构建流程。
 
 ## 集成
 

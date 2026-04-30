@@ -312,7 +312,7 @@ FString FBlueprintMetaCacheService::DecideCacheStatus(
 FString FBlueprintMetaCacheService::ComputeOptionsDigest(const FAutomationAnalysisOptions& Options)
 {
     FString Manifest;
-    Manifest += TEXT("schema=analysis-options-v1\n");
+    Manifest += TEXT("schema=analysis-options-v2\n");
     Manifest += FString::Printf(TEXT("include_native_cxx=%d\n"), Options.bIncludeNativeCxx ? 1 : 0);
     Manifest += FString::Printf(TEXT("include_blueprint_snapshot=%d\n"), Options.bIncludeBlueprintSnapshot ? 1 : 0);
     Manifest += FString::Printf(TEXT("include_class_defaults=%d\n"), Options.bIncludeClassDefaults ? 1 : 0);
