@@ -18,10 +18,12 @@ public class UEEditorAutomation : ModuleRules
 
         PrivateDependencyModuleNames.AddRange(new[]
         {
+            "AIModule",
             "AssetRegistry",
             "AssetTools",
             "BlueprintGraph",
             "EditorStyle",
+            "GameplayTasks",
             "InputCore",
             "KismetCompiler",
             "LevelEditor",

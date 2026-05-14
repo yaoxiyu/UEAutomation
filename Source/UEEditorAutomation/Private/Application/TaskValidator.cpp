@@ -223,6 +223,7 @@ bool FTaskValidator::IsAnalysisOnlyTask(const FString& TaskType) const
     return TaskType == TEXT("analyze_blueprint")
         || TaskType == TEXT("analyze_blueprint_reference_chain")
         || TaskType == TEXT("analyze_asset")
+        || TaskType == TEXT("analyze_behavior_tree")
         || TaskType == TEXT("refresh_blueprint_meta_cache")
         || TaskType == TEXT("export_blueprint_ai_context");
 }

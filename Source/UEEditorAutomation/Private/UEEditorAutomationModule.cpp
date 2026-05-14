@@ -6,6 +6,7 @@
 #include "Adapter/UEBlueprintEditorAdapter.h"
 #include "Core/AutomationLog.h"
 #include "Domain/AssetDuplicationService.h"
+#include "Domain/BehaviorTreeAnalysisService.h"
 #include "Domain/BlueprintAnalysisService.h"
 #include "Framework/Docking/TabManager.h"
 #include "Framework/MultiBox/MultiBoxBuilder.h"
@@ -69,6 +70,9 @@ public:
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FAnalyzeAssetTaskExecutor>(AnalysisService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FRefreshBlueprintMetaCacheTaskExecutor>(AnalysisService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FExportBlueprintAIContextTaskExecutor>(AnalysisService));
+
+        TSharedRef<FBehaviorTreeAnalysisService> BTAnalysisService = MakeShared<FBehaviorTreeAnalysisService>();
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FAnalyzeBehaviorTreeTaskExecutor>(BTAnalysisService));
 
         TSharedRef<FAssetDuplicationService> DuplicationService = MakeShared<FAssetDuplicationService>();
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FDuplicateAssetTaskExecutor>(DuplicationService));

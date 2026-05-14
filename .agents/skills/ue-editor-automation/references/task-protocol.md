@@ -8,6 +8,7 @@
 - `refresh_blueprint_meta_cache`: force fresh analysis for one or more blueprints.
 - `analyze_blueprint_reference_chain`: bounded dependency/reference BFS.
 - `export_blueprint_ai_context`: compact context for reasoning.
+- `analyze_behavior_tree`: snapshot BT node hierarchy, blackboard keys, decorators, services, and task nodes.
 
 ## Common Write Tasks
 

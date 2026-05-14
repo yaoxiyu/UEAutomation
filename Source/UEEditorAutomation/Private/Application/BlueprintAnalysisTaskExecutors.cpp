@@ -48,3 +48,18 @@ bool FExportBlueprintAIContextTaskExecutor::Execute(const FAutomationTaskRequest
 {
     return Service->ExportAIContext(Request, OutResult);
 }
+
+bool FAnalyzeBehaviorTreeTaskExecutor::Validate(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
+{
+    if (Request.TargetAsset.AssetPath.IsEmpty())
+    {
+        OutResult.AddError(TEXT("MissingRequiredField"), TEXT("target_asset.asset_path is required"), TEXT("payload.target_asset.asset_path"));
+        return false;
+    }
+    return true;
+}
+
+bool FAnalyzeBehaviorTreeTaskExecutor::Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult)
+{
+    return Service->AnalyzeBehaviorTree(Request, OutResult);
+}

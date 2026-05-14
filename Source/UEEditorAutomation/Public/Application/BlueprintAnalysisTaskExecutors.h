@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Application/TaskExecutor.h"
+#include "Domain/BehaviorTreeAnalysisService.h"
 #include "Domain/BlueprintAnalysisService.h"
 
 class FBlueprintAnalysisTaskExecutorBase : public ITaskExecutor
@@ -54,4 +55,17 @@ public:
     using FBlueprintAnalysisTaskExecutorBase::FBlueprintAnalysisTaskExecutorBase;
     virtual FString GetTaskType() const override { return TEXT("export_blueprint_ai_context"); }
     virtual bool Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+};
+
+class FAnalyzeBehaviorTreeTaskExecutor : public ITaskExecutor
+{
+public:
+    explicit FAnalyzeBehaviorTreeTaskExecutor(const TSharedRef<FBehaviorTreeAnalysisService>& InService)
+        : Service(InService) {}
+    virtual FString GetTaskType() const override { return TEXT("analyze_behavior_tree"); }
+    virtual bool Validate(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+    virtual bool Execute(const FAutomationTaskRequest& Request, FAutomationTaskResult& OutResult) override;
+
+private:
+    TSharedRef<FBehaviorTreeAnalysisService> Service;
 };

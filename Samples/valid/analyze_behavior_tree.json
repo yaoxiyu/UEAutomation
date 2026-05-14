@@ -1,0 +1,16 @@
+{
+  "protocol_version": 1,
+  "task_id": "sample_analyze_behavior_tree_001",
+  "task_type": "analyze_behavior_tree",
+  "timestamp_utc": "2026-05-14T09:00:00Z",
+  "execution": {
+    "priority": "normal",
+    "save_after_success": false,
+    "open_after_success": false
+  },
+  "payload": {
+    "target_asset": {
+      "asset_path": "/Game/PaperMan/CyAbilities/Nora/X/Summon/AI/BT_X_Nora.BT_X_Nora"
+    }
+  }
+}
