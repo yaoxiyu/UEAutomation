@@ -3,6 +3,7 @@
 #include "Application/AssetDuplicationTaskExecutors.h"
 #include "Application/BlueprintAnalysisTaskExecutors.h"
 #include "Application/EditorAutomationApplicationService.h"
+#include "Application/ListTasksTaskExecutor.h"
 #include "Adapter/UEBlueprintEditorAdapter.h"
 #include "Core/AutomationLog.h"
 #include "Domain/AssetDuplicationService.h"
@@ -79,6 +80,8 @@ public:
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FRedirectAssetReferencesTaskExecutor>(DuplicationService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FListDirectoryAssetsTaskExecutor>(DuplicationService));
         ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FDeleteDirectoryAssetsTaskExecutor>(DuplicationService));
+
+        ApplicationService->GetExecutorRegistry().RegisterExecutor(MakeShared<FListTasksTaskExecutor>(ApplicationService->GetExecutorRegistry()));
 
         ApplicationService->Initialize();
 

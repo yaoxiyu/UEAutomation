@@ -17,6 +17,7 @@ class FTaskExecutorRegistry
 public:
     void RegisterExecutor(const TSharedRef<ITaskExecutor>& Executor);
     TSharedPtr<ITaskExecutor> FindExecutor(const FString& TaskType) const;
+    void GetAllTaskTypes(TArray<FString>& OutTaskTypes) const;
 
 private:
     TMap<FString, TSharedPtr<ITaskExecutor>> Executors;

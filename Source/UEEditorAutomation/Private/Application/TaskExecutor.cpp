@@ -10,3 +10,10 @@ TSharedPtr<ITaskExecutor> FTaskExecutorRegistry::FindExecutor(const FString& Tas
     const TSharedPtr<ITaskExecutor>* Found = Executors.Find(TaskType);
     return Found ? *Found : nullptr;
 }
+
+void FTaskExecutorRegistry::GetAllTaskTypes(TArray<FString>& OutTaskTypes) const
+{
+    OutTaskTypes.Reset(Executors.Num());
+    Executors.GenerateKeyArray(OutTaskTypes);
+    OutTaskTypes.Sort();
+}
