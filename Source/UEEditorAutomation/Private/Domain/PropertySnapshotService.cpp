@@ -100,6 +100,7 @@ namespace
         const FString StructName = Struct->GetName();
         return StructName == TEXT("GameplayTag")
             || StructName == TEXT("GameplayTagContainer")
+            || StructName == TEXT("InheritedTagContainer")
             || StructName == TEXT("DataTableRowHandle")
             || StructName == TEXT("ScalableFloat");
     }
@@ -266,6 +267,20 @@ TSharedPtr<FJsonValue> FPropertySnapshotService::ExportPropertyValue(
                 {
                     const void* TagsAddress = TagsProperty->ContainerPtrToValuePtr<void>(PropertyAddress);
                     Object->SetField(TEXT("GameplayTags"), ExportPropertyValue(TagsProperty, TagsAddress, 0, Options, OutResult));
+                }
+                return MakeShared<FJsonValueObject>(Object);
+            }
+            if (StructName == TEXT("InheritedTagContainer"))
+            {
+                // CombinedTags/Added/Removed are Transient so generic walk skips them.
+                const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
+                for (const TCHAR* FieldName : {TEXT("Added"), TEXT("Removed"), TEXT("CombinedTags")})
+                {
+                    if (FProperty* Inner = Struct->FindPropertyByName(FieldName))
+                    {
+                        const void* InnerAddress = Inner->ContainerPtrToValuePtr<void>(PropertyAddress);
+                        Object->SetField(FieldName, ExportPropertyValue(Inner, InnerAddress, 0, Options, OutResult));
+                    }
                 }
                 return MakeShared<FJsonValueObject>(Object);
             }
